@@ -12,6 +12,12 @@ export function AuthProvider({ children }) {
     api.me().then(({ user: currentUser }) => setUser(currentUser)).catch(() => session.setToken(null)).finally(() => setLoading(false))
   }, [])
 
+  useEffect(() => {
+    const expire = () => setUser(null)
+    window.addEventListener('mentalbridge:session-expired', expire)
+    return () => window.removeEventListener('mentalbridge:session-expired', expire)
+  }, [])
+
   const value = useMemo(() => ({
     user,
     loading,
@@ -21,11 +27,14 @@ export function AuthProvider({ children }) {
       setUser(result.user)
       return result.user
     },
-    async register(details) {
-      const result = await api.register(details)
+    async staffLogin(credentials) {
+      const result = await api.staffLogin(credentials)
       session.setToken(result.token)
       setUser(result.user)
       return result.user
+    },
+    async register(details) {
+      return api.register(details)
     },
     logout() {
       session.setToken(null)

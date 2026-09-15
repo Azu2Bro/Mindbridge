@@ -25,7 +25,7 @@ export function localAnalysis(text) {
     priorities: tags.slice(0, 2),
     riskLevel: urgent ? 'urgent' : 'standard',
     crisisNotice: urgent
-      ? 'Your words suggest you may need immediate, real-time help. MentalBridge cannot provide emergency response. Please contact local emergency services or a trusted crisis hotline now, and reach out to someone you trust nearby.'
+      ? 'Your words suggest you may need immediate, real-time help. MentalBridge cannot provide emergency response. In Bangladesh, call the national emergency service at 999 now and reach out to someone you trust nearby.'
       : null,
     provider: 'local',
   }
@@ -35,7 +35,9 @@ export async function analyzeSupportText(text) {
   const local = localAnalysis(text)
   if (local.riskLevel === 'urgent' || !process.env.OPENAI_API_KEY) return local
 
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  // Keep the coordination flow responsive. If the external model is unavailable,
+  // the deterministic local analyzer below still returns a useful summary.
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 8000, maxRetries: 0 })
   try {
     const response = await client.responses.create({
       model: process.env.OPENAI_MODEL || 'gpt-5.6-luna',

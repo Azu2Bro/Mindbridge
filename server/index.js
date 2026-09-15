@@ -1,7 +1,9 @@
 import 'dotenv/config'
 import { createServer } from 'node:http'
 import { fileURLToPath } from 'node:url'
-import { resolve } from 'node:path'
+import { existsSync } from 'node:fs'
+import { networkInterfaces } from 'node:os'
+import { resolve, sep } from 'node:path'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import cors from 'cors'
@@ -14,7 +16,7 @@ import { JsonStore, store as defaultStore } from './store.js'
 import { MongoStore } from './mongo-store.js'
 import { allowRoles, authRequired, publicUser, signToken, verifyToken } from './auth.js'
 import { analyzeSupportText, localAnalysis, rankVolunteers } from './ai.js'
-import { sendPasswordResetEmail } from './email.js'
+import { sendPasswordResetEmail, sendVerificationEmail } from './email.js'
 
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
 const id = (prefix) => `${prefix}-${randomUUID()}`
@@ -31,6 +33,14 @@ const asTimeAgo = (date) => {
 const emailSchema = z.string().trim().toLowerCase().email().max(160)
 const passwordSchema = z.string().min(8).max(128).regex(/[A-Z]/, 'Password needs an uppercase letter').regex(/[0-9]/, 'Password needs a number')
 const supportTextSchema = z.string().trim().min(20).max(2000)
+const anonymousNameSchema = z.string().trim().min(3, 'Anonymous name needs at least 3 characters').max(40, 'Anonymous name must be 40 characters or fewer').regex(
+  /^[\p{L}\p{M}\p{N}_ .'’-]+$/u,
+  'Anonymous name can contain letters, numbers, spaces, periods, apostrophes, underscores, and hyphens',
+)
+const optionalAnonymousNameSchema = z.preprocess(
+  (value) => typeof value === 'string' && !value.trim() ? undefined : value,
+  anonymousNameSchema.optional(),
+)
 
 function parse(schema, value) {
   const result = schema.safeParse(value)
@@ -47,6 +57,7 @@ function volunteerProfile(user, matchScore) {
   delete safe.email
   delete safe.privacy
   delete safe.bookmarks
+  delete safe.postBookmarks
   return { ...safe, matchScore }
 }
 
@@ -57,36 +68,107 @@ function peerVisibleProfile(user, viewerId) {
   return volunteerProfile(user)
 }
 
-function formatPost(post, userId) {
+function formatPost(post, userId, postBookmarks = []) {
   return {
     ...post,
     time: asTimeAgo(post.createdAt),
-    likes: post.reactions.length,
-    liked: post.reactions.includes(userId),
-    comments: post.comments.length,
+    likes: (post.reactions || []).length,
+    liked: (post.reactions || []).includes(userId),
+    bookmarked: postBookmarks.includes(post.id),
+    comments: (post.comments || []).filter((comment) => !comment.removed),
+    commentCount: (post.comments || []).filter((comment) => !comment.removed).length,
     reactions: undefined,
   }
 }
 
+async function normalizeDataStore(dataStore) {
+  await dataStore.mutate((data) => {
+    data.passwordResets ||= []
+    data.emailVerifications ||= []
+    data.reports ||= []
+    data.auditLogs ||= []
+    data.notifications ||= []
+    data.conversations ||= []
+    data.supportRequests ||= []
+    data.moods ||= []
+    data.posts ||= []
+    data.resources ||= []
+    data.users ||= []
+    data.users.forEach((user) => {
+      user.bookmarks ||= []
+      user.postBookmarks ||= []
+      user.privacy ||= { showOnline: true, allowReminders: true }
+      // Accounts created before email verification was introduced remain usable.
+      user.emailVerified ??= true
+    })
+    data.posts.forEach((post) => {
+      post.reactions ||= []
+      post.comments ||= []
+      post.locked ??= false
+      post.pinned ??= false
+      post.removed ??= false
+    })
+    return true
+  })
+}
+
 export async function createApp({ store: suppliedStore } = {}) {
-  const dataStore = suppliedStore || (process.env.MONGODB_URI ? new MongoStore(process.env.MONGODB_URI) : defaultStore)
+  let dataStore = suppliedStore
+  let storageMode = suppliedStore ? 'test' : 'json'
+  if (!dataStore && process.env.MONGODB_URI) {
+    try {
+      dataStore = new MongoStore(process.env.MONGODB_URI)
+      await dataStore.init()
+      storageMode = 'mongodb'
+    } catch (error) {
+      if (process.env.NODE_ENV === 'production') throw error
+      console.warn(`MongoDB is unavailable; using the local JSON store: ${error.message}`)
+      dataStore = defaultStore
+      storageMode = 'json-fallback'
+    }
+  }
+  dataStore ||= defaultStore
   await dataStore.init()
+  await normalizeDataStore(dataStore)
   const app = express()
   app.locals.store = dataStore
+  app.locals.storageMode = storageMode
 
-  app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
+  app.use(helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    // Helmet's default policy adds upgrade-insecure-requests, which breaks the plain-http
+    // LAN URL used to demo this on a phone, so the directives are spelled out instead.
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: {
+        defaultSrc: ["'self'"],
+        baseUri: ["'self'"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'],
+        imgSrc: ["'self'", 'data:', 'blob:'],
+        connectSrc: ["'self'", 'ws:', 'wss:'],
+        manifestSrc: ["'self'"],
+        formAction: ["'self'"],
+      },
+    },
+  }))
   const configuredOrigins = process.env.CLIENT_ORIGIN?.split(',').map((item) => item.trim()).filter(Boolean)
   if (configuredOrigins?.length) app.use(cors({ origin: configuredOrigins, credentials: true }))
   else if (process.env.NODE_ENV !== 'production') app.use(cors({ origin: ['http://localhost:5173', 'http://127.0.0.1:5173'], credentials: true }))
   app.use(express.json({ limit: '48kb' }))
+  // Staff credentials are the highest-value target, so the staff portal gets its own tighter budget.
+  app.use('/api/auth/staff', rateLimit({ windowMs: 15 * 60 * 1000, limit: 12, standardHeaders: true, legacyHeaders: false, message: { error: 'Too many staff sign-in attempts. Try again in a few minutes.' } }))
   app.use('/api/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 80, standardHeaders: true, legacyHeaders: false }))
 
-  app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'mentalbridge-api', ai: process.env.OPENAI_API_KEY ? 'openai' : 'local', timestamp: now() }))
+  app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'mentalbridge-api', storage: app.locals.storageMode, ai: process.env.OPENAI_API_KEY ? 'openai' : 'local', timestamp: now() }))
 
   app.post('/api/auth/register', asyncRoute(async (req, res) => {
     const body = parse(z.object({
       displayName: z.string().trim().min(2).max(70),
-      anonymousName: z.string().trim().min(3).max(40).regex(/^[\p{L}\p{N}_ -]+$/u).optional(),
+      anonymousName: optionalAnonymousNameSchema,
       email: emailSchema,
       password: passwordSchema,
     }), req.body)
@@ -95,17 +177,101 @@ export async function createApp({ store: suppliedStore } = {}) {
       id: id('user'), email: body.email, passwordHash: await bcrypt.hash(body.password, 12), displayName: body.displayName,
       anonymousName: body.anonymousName || `GentleRiver${Math.floor(Math.random() * 900 + 100)}`,
       role: 'user', status: 'active', privacy: { showOnline: true, allowReminders: true }, bookmarks: [],
-      createdAt: now(), avatarColor: '#e5aa82',
+      emailVerified: false, createdAt: now(), avatarColor: '#e5aa82',
     }
-    await dataStore.mutate((data) => { data.users.push(user); data.auditLogs.push({ id: id('audit'), actorId: user.id, action: 'account.registered', createdAt: now() }); return user })
-    res.status(201).json({ token: signToken(user), user: publicUser(user) })
+    const verificationToken = randomBytes(32).toString('hex')
+    const tokenHash = createHash('sha256').update(verificationToken).digest('hex')
+    await dataStore.mutate((data) => {
+      data.users.push(user)
+      data.emailVerifications.push({ id: id('verify'), userId: user.id, tokenHash, expiresAt: new Date(Date.now() + 24 * 60 * 60000).toISOString(), createdAt: now() })
+      data.auditLogs.push({ id: id('audit'), actorId: user.id, action: 'account.registered', createdAt: now() })
+      return user
+    })
+    const emailSent = await sendVerificationEmail({ to: user.email, displayName: user.displayName, token: verificationToken }).catch((error) => { console.error('Verification email failed:', error.message); return false })
+    res.status(201).json({
+      user: publicUser(user), verificationRequired: true, emailSent,
+      message: emailSent
+        ? 'Check your email and follow the verification link before signing in.'
+        : process.env.NODE_ENV === 'production'
+          ? 'Account created, but the verification email could not be delivered. Check the address and request a new link.'
+          : 'Account created. Email delivery is not configured in this development environment.',
+      ...(process.env.NODE_ENV !== 'production' && !emailSent ? { verificationToken } : {}),
+    })
   }))
 
-  app.post('/api/auth/login', asyncRoute(async (req, res) => {
-    const body = parse(z.object({ email: emailSchema, password: z.string().min(1).max(128) }), req.body)
+  const credentialsSchema = z.object({ email: emailSchema, password: z.string().min(1).max(128), portal: z.enum(['member', 'staff']).optional() })
+  const staffRoles = ['moderator', 'admin']
+
+  // Shared credential check. Each portal decides separately which roles it will admit.
+  async function authenticate(req, res) {
+    const body = parse(credentialsSchema, req.body)
     const user = dataStore.data.users.find((item) => item.email === body.email)
-    if (!user || user.status !== 'active' || !(await bcrypt.compare(body.password, user.passwordHash))) return res.status(401).json({ error: 'Email or password is incorrect' })
+    if (!user || user.status !== 'active' || !(await bcrypt.compare(body.password, user.passwordHash))) {
+      res.status(401).json({ error: 'Email or password is incorrect' })
+      return null
+    }
+    if (!user.emailVerified) {
+      res.status(403).json({ error: 'Verify your email before signing in.', verificationRequired: true })
+      return null
+    }
+    return user
+  }
+
+  // Member portal: members and volunteers only. Staff accounts are pushed to their own portal.
+  app.post('/api/auth/login', asyncRoute(async (req, res) => {
+    const user = await authenticate(req, res)
+    if (!user) return
+    if (staffRoles.includes(user.role)) return res.status(403).json({ error: 'This is a staff account. Sign in from the staff portal at /staff.', staffPortal: true })
     res.json({ token: signToken(user), user: publicUser(user) })
+  }))
+
+  // Staff portal: moderators and administrators only, rate limited separately and always audited.
+  app.post('/api/auth/staff/login', asyncRoute(async (req, res) => {
+    const user = await authenticate(req, res)
+    if (!user) return
+    if (!staffRoles.includes(user.role)) {
+      await dataStore.mutate((data) => data.auditLogs.push({ id: id('audit'), actorId: user.id, action: 'staff.login.denied', metadata: { role: user.role }, createdAt: now() }))
+      return res.status(403).json({ error: 'This account does not have moderator or administrator access.' })
+    }
+    await dataStore.mutate((data) => data.auditLogs.push({ id: id('audit'), actorId: user.id, action: 'staff.login', metadata: { role: user.role }, createdAt: now() }))
+    res.json({ token: signToken(user), user: publicUser(user) })
+  }))
+
+  app.post('/api/auth/verify-email', asyncRoute(async (req, res) => {
+    const token = parse(z.string().min(32).max(200), req.body?.token)
+    const tokenHash = createHash('sha256').update(token).digest('hex')
+    const verification = dataStore.data.emailVerifications.find((item) => item.tokenHash === tokenHash && new Date(item.expiresAt) > new Date())
+    if (!verification) return res.status(400).json({ error: 'This verification link is invalid or has expired.' })
+    const user = await dataStore.mutate((data) => {
+      const item = data.users.find((candidate) => candidate.id === verification.userId)
+      if (!item) { const error = new Error('Account not found'); error.status = 404; throw error }
+      item.emailVerified = true
+      data.emailVerifications = data.emailVerifications.filter((entry) => entry.userId !== item.id)
+      data.auditLogs.push({ id: id('audit'), actorId: item.id, action: 'email.verified', createdAt: now() })
+      return item
+    })
+    res.json({ success: true, message: 'Your email is verified. You can sign in now.', user: publicUser(user) })
+  }))
+
+  app.post('/api/auth/resend-verification', asyncRoute(async (req, res) => {
+    const email = parse(emailSchema, req.body?.email)
+    const user = dataStore.data.users.find((item) => item.email === email && item.status === 'active')
+    let verificationToken = null
+    let emailSent = false
+    if (user && !user.emailVerified) {
+      verificationToken = randomBytes(32).toString('hex')
+      const tokenHash = createHash('sha256').update(verificationToken).digest('hex')
+      await dataStore.mutate((data) => {
+        data.emailVerifications = data.emailVerifications.filter((entry) => entry.userId !== user.id)
+        data.emailVerifications.push({ id: id('verify'), userId: user.id, tokenHash, expiresAt: new Date(Date.now() + 24 * 60 * 60000).toISOString(), createdAt: now() })
+        return true
+      })
+      emailSent = await sendVerificationEmail({ to: user.email, displayName: user.displayName, token: verificationToken }).catch((error) => { console.error('Verification email failed:', error.message); return false })
+    }
+    res.json({
+      message: emailSent ? 'A new verification email has been sent.' : 'If an unverified account exists, a new verification link is ready.',
+      ...(process.env.NODE_ENV !== 'production' && verificationToken && !emailSent ? { verificationToken } : {}),
+    })
   }))
 
   app.post('/api/auth/forgot-password', asyncRoute(async (req, res) => {
@@ -148,7 +314,7 @@ export async function createApp({ store: suppliedStore } = {}) {
   app.put('/api/users/me', asyncRoute(async (req, res) => {
     const body = parse(z.object({
       displayName: z.string().trim().min(2).max(70).optional(),
-      anonymousName: z.string().trim().min(3).max(40).optional(),
+      anonymousName: anonymousNameSchema.optional(),
       privacy: z.object({ showOnline: z.boolean(), allowReminders: z.boolean() }).optional(),
       availability: z.enum(['available', 'limited', 'unavailable']).optional(),
       bio: z.string().max(500).optional(),
@@ -163,17 +329,17 @@ export async function createApp({ store: suppliedStore } = {}) {
     res.json({ user: publicUser(updated) })
   }))
 
-  app.get('/api/dashboard', (req, res) => {
+  app.get('/api/dashboard', allowRoles('user'), (req, res) => {
     const data = dataStore.snapshot()
     const requests = data.supportRequests.filter((request) => request.userId === req.user.id)
-    const current = requests.find((request) => ['assigned', 'in_progress'].includes(request.status)) || null
+    const current = requests.filter((request) => ['assigned', 'in_progress'].includes(request.status)).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0] || null
     const volunteer = current ? data.users.find((user) => user.id === current.volunteerId) : null
     const moods = data.moods.filter((mood) => mood.userId === req.user.id).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)).slice(-7)
     const notifications = data.notifications.filter((notification) => notification.userId === req.user.id && !notification.read).length
     res.json({ currentSupport: current ? { ...current, volunteer: volunteerProfile(volunteer, current.matchScore) } : null, moods, unreadNotifications: notifications })
   })
 
-  app.post('/api/ai/analyze', rateLimit({ windowMs: 60000, limit: 12 }), asyncRoute(async (req, res) => {
+  app.post('/api/ai/analyze', allowRoles('user'), rateLimit({ windowMs: 60000, limit: 12 }), asyncRoute(async (req, res) => {
     const text = parse(supportTextSchema, req.body?.text)
     const analysis = await analyzeSupportText(text)
     res.json({ analysis })
@@ -198,7 +364,7 @@ export async function createApp({ store: suppliedStore } = {}) {
     res.json({ requests })
   })
 
-  app.post('/api/support-requests', asyncRoute(async (req, res) => {
+  app.post('/api/support-requests', allowRoles('user'), asyncRoute(async (req, res) => {
     const body = parse(z.object({
       description: supportTextSchema,
       summary: z.string().trim().min(20).max(1200).optional(),
@@ -212,7 +378,7 @@ export async function createApp({ store: suppliedStore } = {}) {
       : body.summary && body.tags
         ? { summary: body.summary, tags: body.tags, priorities: body.priorities || body.tags.slice(0, 2), riskLevel: 'standard', crisisNotice: null, provider: 'reviewed' }
         : await analyzeSupportText(body.description)
-    const selectedVolunteer = analysis.riskLevel === 'urgent' ? null : dataStore.data.users.find((user) => user.id === body.volunteerId && user.role === 'volunteer' && user.status === 'active')
+    const selectedVolunteer = analysis.riskLevel === 'urgent' ? null : dataStore.data.users.find((user) => user.id === body.volunteerId && user.role === 'volunteer' && user.status === 'active' && user.availability !== 'unavailable')
     const ranked = rankVolunteers(analysis.tags, dataStore.data.users)
     const volunteer = selectedVolunteer || (analysis.riskLevel === 'standard' ? ranked[0] : null)
     const matchScore = volunteer ? (ranked.find((item) => item.id === volunteer.id)?.matchScore || 80) : null
@@ -246,7 +412,18 @@ export async function createApp({ store: suppliedStore } = {}) {
       const item = data.supportRequests.find((request) => request.id === req.params.requestId)
       if (!item) { const error = new Error('Support request not found'); error.status = 404; throw error }
       if (req.user.role === 'volunteer' && item.volunteerId !== req.user.id) { const error = new Error('This request is not assigned to you'); error.status = 403; throw error }
+      if (req.user.role === 'volunteer' && body.volunteerId !== undefined) { const error = new Error('Only moderators and administrators can assign volunteers'); error.status = 403; throw error }
+      const previousVolunteerId = item.volunteerId
       Object.assign(item, body, { updatedAt: now() })
+      if (body.volunteerId && body.volunteerId !== previousVolunteerId) {
+        const volunteer = data.users.find((user) => user.id === body.volunteerId && user.role === 'volunteer' && user.status === 'active')
+        if (!volunteer) { const error = new Error('Volunteer not found'); error.status = 400; throw error }
+        item.volunteerId = volunteer.id
+        item.status = body.status || 'assigned'
+        const existingConversation = data.conversations.find((conversation) => conversation.supportRequestId === item.id && conversation.participantIds.includes(volunteer.id))
+        if (!existingConversation) data.conversations.push({ id: id('conversation'), supportRequestId: item.id, participantIds: [item.userId, volunteer.id], createdAt: now(), messages: [] })
+        data.notifications.push({ id: id('notification'), userId: volunteer.id, type: 'support', title: 'New peer-support request', body: 'A moderator assigned a support request to you.', read: false, createdAt: now() })
+      }
       data.notifications.push({ id: id('notification'), userId: item.userId, type: 'support', title: 'Your support request was updated', body: `Status: ${item.status.replace('_', ' ')}`, read: false, createdAt: now() })
       data.auditLogs.push({ id: id('audit'), actorId: req.user.id, action: 'support.updated', targetId: item.id, createdAt: now() })
       return item
@@ -255,7 +432,20 @@ export async function createApp({ store: suppliedStore } = {}) {
     res.json({ request })
   }))
 
-  app.post('/api/support-requests/:requestId/feedback', asyncRoute(async (req, res) => {
+  app.post('/api/support-requests/:requestId/cancel', allowRoles('user'), asyncRoute(async (req, res) => {
+    const request = await dataStore.mutate((data) => {
+      const item = data.supportRequests.find((request) => request.id === req.params.requestId && request.userId === req.user.id)
+      if (!item) { const error = new Error('Support request not found'); error.status = 404; throw error }
+      if (item.status === 'completed') { const error = new Error('A completed request cannot be cancelled'); error.status = 409; throw error }
+      item.status = 'declined'
+      item.updatedAt = now()
+      data.auditLogs.push({ id: id('audit'), actorId: req.user.id, action: 'support.cancelled', targetId: item.id, createdAt: now() })
+      return item
+    })
+    res.json({ request })
+  }))
+
+  app.post('/api/support-requests/:requestId/feedback', allowRoles('user'), asyncRoute(async (req, res) => {
     const body = parse(z.object({ rating: z.number().int().min(1).max(5), comment: z.string().trim().max(1000).optional() }), req.body)
     const request = await dataStore.mutate((data) => {
       const item = data.supportRequests.find((request) => request.id === req.params.requestId && request.userId === req.user.id)
@@ -266,36 +456,57 @@ export async function createApp({ store: suppliedStore } = {}) {
     res.json({ request })
   }))
 
-  app.get('/api/moods', (req, res) => {
+  app.get('/api/moods', allowRoles('user'), (req, res) => {
     const moods = dataStore.data.moods.filter((mood) => mood.userId === req.user.id).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
     res.json({ moods })
   })
-  app.post('/api/moods', asyncRoute(async (req, res) => {
+  app.post('/api/moods', allowRoles('user'), asyncRoute(async (req, res) => {
     const body = parse(z.object({ score: z.number().int().min(1).max(5), journal: z.string().trim().max(2000).optional().default('') }), req.body)
     const entry = { id: id('mood'), userId: req.user.id, ...body, createdAt: now() }
-    await dataStore.mutate((data) => {
+    const saved = await dataStore.mutate((data) => {
       const today = new Date().toISOString().slice(0, 10)
       const existing = data.moods.find((mood) => mood.userId === req.user.id && mood.createdAt.slice(0, 10) === today)
       if (existing) Object.assign(existing, body, { createdAt: now() })
       else data.moods.push(entry)
       return existing || entry
     })
-    res.status(201).json({ mood: entry })
+    res.status(201).json({ mood: saved })
   }))
 
   app.get('/api/posts', (req, res) => {
     const category = String(req.query.category || '')
     let posts = dataStore.data.posts.filter((post) => !post.removed)
     if (category && category !== 'All stories') posts = posts.filter((post) => post.category === category)
-    res.json({ posts: posts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map((post) => formatPost(post, req.user.id)) })
+    res.json({ posts: posts.sort((a, b) => Number(b.pinned) - Number(a.pinned) || new Date(b.createdAt) - new Date(a.createdAt)).map((post) => formatPost(post, req.user.id, req.user.postBookmarks || [])) })
   })
-  app.post('/api/posts', asyncRoute(async (req, res) => {
+  app.post('/api/posts', allowRoles('user', 'volunteer'), asyncRoute(async (req, res) => {
     const body = parse(z.object({ title: z.string().trim().min(10).max(240), body: z.string().trim().max(3000).optional().default('Shared anonymously with the MentalBridge community.'), category: z.enum(['Small wins', 'Anxiety', 'Burnout', 'Loneliness', 'General']).default('General') }), req.body)
     const post = { id: id('post'), userId: req.user.id, author: req.user.anonymousName, initials: req.user.anonymousName.slice(0, 2).toUpperCase(), avatarColor: req.user.avatarColor, ...body, createdAt: now(), reactions: [], comments: [], locked: false, pinned: false }
     await dataStore.mutate((data) => { data.posts.push(post); return post })
-    res.status(201).json({ post: formatPost(post, req.user.id) })
+    res.status(201).json({ post: formatPost(post, req.user.id, req.user.postBookmarks || []) })
   }))
-  app.post('/api/posts/:postId/reactions', asyncRoute(async (req, res) => {
+  app.put('/api/posts/:postId', allowRoles('user', 'volunteer'), asyncRoute(async (req, res) => {
+    const body = parse(z.object({ title: z.string().trim().min(10).max(240).optional(), body: z.string().trim().max(3000).optional(), category: z.enum(['Small wins', 'Anxiety', 'Burnout', 'Loneliness', 'General']).optional() }), req.body)
+    const post = await dataStore.mutate((data) => {
+      const item = data.posts.find((post) => post.id === req.params.postId && post.userId === req.user.id && !post.removed)
+      if (!item) { const error = new Error('Post not found or cannot be edited'); error.status = 404; throw error }
+      Object.assign(item, body, { updatedAt: now() })
+      return item
+    })
+    res.json({ post: formatPost(post, req.user.id, req.user.postBookmarks || []) })
+  }))
+  app.delete('/api/posts/:postId', allowRoles('user', 'volunteer'), asyncRoute(async (req, res) => {
+    await dataStore.mutate((data) => {
+      const item = data.posts.find((post) => post.id === req.params.postId && post.userId === req.user.id && !post.removed)
+      if (!item) { const error = new Error('Post not found or cannot be deleted'); error.status = 404; throw error }
+      item.removed = true
+      item.updatedAt = now()
+      data.auditLogs.push({ id: id('audit'), actorId: req.user.id, action: 'post.deleted', targetId: item.id, createdAt: now() })
+      return true
+    })
+    res.json({ success: true })
+  }))
+  app.post('/api/posts/:postId/reactions', allowRoles('user', 'volunteer'), asyncRoute(async (req, res) => {
     const post = await dataStore.mutate((data) => {
       const item = data.posts.find((post) => post.id === req.params.postId && !post.removed)
       if (!item) { const error = new Error('Post not found'); error.status = 404; throw error }
@@ -303,9 +514,9 @@ export async function createApp({ store: suppliedStore } = {}) {
       if (index >= 0) item.reactions.splice(index, 1); else item.reactions.push(req.user.id)
       return item
     })
-    res.json({ post: formatPost(post, req.user.id) })
+    res.json({ post: formatPost(post, req.user.id, req.user.postBookmarks || []) })
   }))
-  app.post('/api/posts/:postId/comments', asyncRoute(async (req, res) => {
+  app.post('/api/posts/:postId/comments', allowRoles('user', 'volunteer'), asyncRoute(async (req, res) => {
     const text = parse(z.string().trim().min(1).max(1200), req.body?.text)
     const comment = { id: id('comment'), userId: req.user.id, author: req.user.anonymousName, text, createdAt: now(), removed: false }
     await dataStore.mutate((data) => {
@@ -315,8 +526,24 @@ export async function createApp({ store: suppliedStore } = {}) {
     })
     res.status(201).json({ comment })
   }))
-  app.post('/api/posts/:postId/report', asyncRoute(async (req, res) => {
+  app.post('/api/posts/:postId/bookmark', allowRoles('user', 'volunteer'), asyncRoute(async (req, res) => {
+    const postBookmarks = await dataStore.mutate((data) => {
+      const post = data.posts.find((item) => item.id === req.params.postId && !item.removed)
+      if (!post) { const error = new Error('Post not found'); error.status = 404; throw error }
+      const user = data.users.find((item) => item.id === req.user.id)
+      user.postBookmarks ||= []
+      const index = user.postBookmarks.indexOf(post.id)
+      if (index >= 0) user.postBookmarks.splice(index, 1); else user.postBookmarks.push(post.id)
+      return user.postBookmarks
+    })
+    res.json({ postBookmarks })
+  }))
+  app.post('/api/posts/:postId/report', allowRoles('user', 'volunteer'), asyncRoute(async (req, res) => {
     const reason = parse(z.string().trim().min(3).max(500), req.body?.reason || 'Potentially harmful content')
+    const target = dataStore.data.posts.find((post) => post.id === req.params.postId && !post.removed)
+    if (!target) return res.status(404).json({ error: 'Post not found' })
+    const existing = dataStore.data.reports.find((report) => report.reporterId === req.user.id && report.targetId === req.params.postId && ['open', 'reviewing'].includes(report.status))
+    if (existing) return res.status(409).json({ error: 'You have already reported this post' })
     const report = { id: id('report'), reporterId: req.user.id, targetType: 'post', targetId: req.params.postId, reason, status: 'open', createdAt: now() }
     await dataStore.mutate((data) => { data.reports.push(report); return report })
     res.status(201).json({ report })
@@ -328,7 +555,7 @@ export async function createApp({ store: suppliedStore } = {}) {
     const resources = dataStore.data.resources.filter((resource) => resource.published && (!category || category === 'All' || resource.category === category) && (!query || `${resource.title} ${resource.description} ${resource.category}`.toLowerCase().includes(query)))
     res.json({ resources, bookmarks: req.user.bookmarks || [] })
   })
-  app.post('/api/resources/:resourceId/bookmark', asyncRoute(async (req, res) => {
+  app.post('/api/resources/:resourceId/bookmark', allowRoles('user', 'volunteer'), asyncRoute(async (req, res) => {
     const bookmarks = await dataStore.mutate((data) => {
       const user = data.users.find((item) => item.id === req.user.id)
       user.bookmarks ||= []
@@ -339,7 +566,7 @@ export async function createApp({ store: suppliedStore } = {}) {
     res.json({ bookmarks })
   }))
 
-  app.get('/api/conversations', (req, res) => {
+  app.get('/api/conversations', allowRoles('user', 'volunteer'), (req, res) => {
     const data = dataStore.snapshot()
     const conversations = data.conversations.filter((conversation) => conversation.participantIds.includes(req.user.id)).map((conversation) => {
       const otherId = conversation.participantIds.find((participantId) => participantId !== req.user.id)
@@ -349,7 +576,7 @@ export async function createApp({ store: suppliedStore } = {}) {
     })
     res.json({ conversations })
   })
-  app.get('/api/conversations/:conversationId/messages', asyncRoute(async (req, res) => {
+  app.get('/api/conversations/:conversationId/messages', allowRoles('user', 'volunteer'), asyncRoute(async (req, res) => {
     const conversation = await dataStore.mutate((data) => {
       const item = data.conversations.find((conversation) => conversation.id === req.params.conversationId && conversation.participantIds.includes(req.user.id))
       if (!item) { const error = new Error('Conversation not found'); error.status = 404; throw error }
@@ -358,7 +585,7 @@ export async function createApp({ store: suppliedStore } = {}) {
     })
     res.json({ messages: conversation.messages })
   }))
-  app.post('/api/conversations/:conversationId/messages', asyncRoute(async (req, res) => {
+  app.post('/api/conversations/:conversationId/messages', allowRoles('user', 'volunteer'), asyncRoute(async (req, res) => {
     const text = parse(z.string().trim().min(1).max(4000), req.body?.text)
     const result = await dataStore.mutate((data) => {
       const conversation = data.conversations.find((item) => item.id === req.params.conversationId && item.participantIds.includes(req.user.id))
@@ -409,6 +636,7 @@ export async function createApp({ store: suppliedStore } = {}) {
   }))
   app.patch('/api/admin/posts/:postId', allowRoles('moderator', 'admin'), asyncRoute(async (req, res) => {
     const body = parse(z.object({ removed: z.boolean().optional(), locked: z.boolean().optional(), pinned: z.boolean().optional() }), req.body)
+    if (body.removed !== undefined && req.user.role !== 'admin') return res.status(403).json({ error: 'Only an administrator can remove or restore posts' })
     const post = await dataStore.mutate((data) => {
       const item = data.posts.find((post) => post.id === req.params.postId)
       if (!item) { const error = new Error('Post not found'); error.status = 404; throw error }
@@ -418,12 +646,116 @@ export async function createApp({ store: suppliedStore } = {}) {
     })
     res.json({ post: formatPost(post, req.user.id) })
   }))
+  app.get('/api/admin/posts', allowRoles('moderator', 'admin'), (req, res) => {
+    const posts = dataStore.data.posts
+      .slice()
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .map((post) => formatPost(post, req.user.id))
+    res.json({ posts })
+  })
+  app.get('/api/admin/resources', allowRoles('moderator', 'admin'), (req, res) => {
+    const resources = dataStore.data.resources.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    res.json({ resources })
+  })
+  app.post('/api/admin/resources', allowRoles('moderator', 'admin'), asyncRoute(async (req, res) => {
+    const body = parse(z.object({
+      title: z.string().trim().min(5).max(180), description: z.string().trim().min(10).max(600),
+      content: z.string().trim().min(20).max(12000), category: z.string().trim().min(2).max(60),
+      type: z.string().trim().min(2).max(40).default('5 min read'),
+      icon: z.enum(['Wind', 'Headphones', 'Coffee', 'FileText', 'MoonStar', 'HeartHandshake', 'BookOpen']).default('BookOpen'),
+      color: z.enum(['sage', 'lavender', 'apricot', 'blue', 'navy', 'rose']).default('sage'),
+      featured: z.boolean().default(false), published: z.boolean().default(true),
+    }), req.body)
+    const resource = { id: id('resource'), ...body, createdBy: req.user.id, createdAt: now(), updatedAt: now() }
+    await dataStore.mutate((data) => {
+      data.resources.push(resource)
+      data.auditLogs.push({ id: id('audit'), actorId: req.user.id, action: 'resource.created', targetId: resource.id, createdAt: now() })
+      return resource
+    })
+    res.status(201).json({ resource })
+  }))
+  app.put('/api/admin/resources/:resourceId', allowRoles('moderator', 'admin'), asyncRoute(async (req, res) => {
+    const body = parse(z.object({
+      title: z.string().trim().min(5).max(180).optional(), description: z.string().trim().min(10).max(600).optional(),
+      content: z.string().trim().min(20).max(12000).optional(), category: z.string().trim().min(2).max(60).optional(),
+      type: z.string().trim().min(2).max(40).optional(),
+      icon: z.enum(['Wind', 'Headphones', 'Coffee', 'FileText', 'MoonStar', 'HeartHandshake', 'BookOpen']).optional(),
+      color: z.enum(['sage', 'lavender', 'apricot', 'blue', 'navy', 'rose']).optional(),
+      featured: z.boolean().optional(), published: z.boolean().optional(),
+    }), req.body)
+    const resource = await dataStore.mutate((data) => {
+      const item = data.resources.find((resource) => resource.id === req.params.resourceId)
+      if (!item) { const error = new Error('Resource not found'); error.status = 404; throw error }
+      Object.assign(item, body, { updatedAt: now(), updatedBy: req.user.id })
+      data.auditLogs.push({ id: id('audit'), actorId: req.user.id, action: 'resource.updated', targetId: item.id, createdAt: now() })
+      return item
+    })
+    res.json({ resource })
+  }))
+  app.delete('/api/admin/resources/:resourceId', allowRoles('admin'), asyncRoute(async (req, res) => {
+    await dataStore.mutate((data) => {
+      const index = data.resources.findIndex((resource) => resource.id === req.params.resourceId)
+      if (index < 0) { const error = new Error('Resource not found'); error.status = 404; throw error }
+      const [removed] = data.resources.splice(index, 1)
+      data.users.forEach((user) => { user.bookmarks = (user.bookmarks || []).filter((resourceId) => resourceId !== removed.id) })
+      data.auditLogs.push({ id: id('audit'), actorId: req.user.id, action: 'resource.deleted', targetId: removed.id, createdAt: now() })
+      return true
+    })
+    res.json({ success: true })
+  }))
   app.get('/api/admin/audit-logs', allowRoles('admin'), (req, res) => res.json({ logs: dataStore.data.auditLogs.slice(-100).reverse() }))
+  app.get('/api/admin/users', allowRoles('moderator', 'admin'), (req, res) => {
+    const users = dataStore.data.users.map((user) => ({ ...publicUser(user), email: req.user.role === 'admin' ? user.email : undefined }))
+    res.json({ users })
+  })
+  app.patch('/api/admin/users/:userId', allowRoles('moderator', 'admin'), asyncRoute(async (req, res) => {
+    const body = parse(z.object({
+      status: z.enum(['active', 'suspended', 'pending']).optional(),
+      role: z.enum(['user', 'volunteer', 'moderator']).optional(),
+    }).refine((value) => value.status !== undefined || value.role !== undefined, 'Choose a status or role to update'), req.body)
+    if (req.params.userId === req.user.id && (body.status !== undefined || body.role !== undefined)) return res.status(409).json({ error: 'You cannot change your own access' })
+    const user = await dataStore.mutate((data) => {
+      const item = data.users.find((user) => user.id === req.params.userId)
+      if (!item) { const error = new Error('User not found'); error.status = 404; throw error }
+      if (item.role === 'admin') { const error = new Error('Administrator accounts cannot be changed here'); error.status = 403; throw error }
+      if (req.user.role === 'moderator' && (item.role === 'moderator' || body.role === 'moderator')) { const error = new Error('Only an administrator can manage moderators'); error.status = 403; throw error }
+      if (body.role && !item.emailVerified) { const error = new Error('Verify this account email before assigning a staff or volunteer role'); error.status = 409; throw error }
+      if (body.status) item.status = body.status
+      if (body.role) {
+        item.role = body.role
+        if (body.role === 'volunteer') {
+          item.availability ||= 'available'
+          item.expertise ||= ['Emotional support']
+          item.livedExperience ||= []
+          item.bio ||= 'Peer supporter assigned by the MentalBridge care team.'
+          item.yearsActive ||= 1
+          item.rating ||= 5
+        }
+      }
+      data.notifications.push({ id: id('notification'), userId: item.id, type: 'account', title: 'Your account access was updated', body: `Your MentalBridge role is now ${item.role}.`, read: false, createdAt: now() })
+      data.auditLogs.push({ id: id('audit'), actorId: req.user.id, action: body.role ? 'user.role.updated' : 'user.status.updated', targetId: item.id, metadata: body, createdAt: now() })
+      return item
+    })
+    res.json({ user: publicUser(user) })
+  }))
 
-  if (process.env.NODE_ENV === 'production') {
-    const distPath = resolve(process.cwd(), 'dist')
-    app.use(express.static(distPath))
-    app.get(/^(?!\/api).*/, (req, res) => res.sendFile(resolve(distPath, 'index.html')))
+  // Serve the built single-page app from the API origin whenever a build exists. One URL then
+  // covers the laptop and the phone, which is what makes the installable web app work on a LAN.
+  const distPath = resolve(process.cwd(), 'dist')
+  const distIndex = resolve(distPath, 'index.html')
+  app.locals.servesClient = existsSync(distIndex)
+  if (app.locals.servesClient) {
+    app.use(express.static(distPath, {
+      index: false,
+      setHeaders(res, filePath) {
+        // Hashed build assets can be cached hard; the shell and worker must always revalidate.
+        if (filePath.includes(`${sep}assets${sep}`)) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+        else res.setHeader('Cache-Control', 'no-cache')
+      },
+    }))
+    app.get(/^(?!\/api).*/, (req, res) => res.sendFile(distIndex, { headers: { 'Cache-Control': 'no-cache' } }))
+  } else if (process.env.NODE_ENV === 'production') {
+    console.warn('No dist/ build found. Run "npm run build" so the server can serve the web app.')
   }
   app.use((req, res) => res.status(404).json({ error: 'Endpoint not found' }))
   app.use((error, req, res, next) => {
@@ -433,8 +765,16 @@ export async function createApp({ store: suppliedStore } = {}) {
   return app
 }
 
+// Every non-internal IPv4 address, so the phone URL can be read straight off the terminal.
+function lanAddresses() {
+  return Object.values(networkInterfaces()).flat()
+    .filter((item) => item && item.family === 'IPv4' && !item.internal)
+    .map((item) => item.address)
+}
+
 export async function startServer({ store } = {}) {
   if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) throw new Error('JWT_SECRET is required in production')
+  if (process.env.NODE_ENV === 'production' && !process.env.SMTP_HOST) throw new Error('SMTP_HOST is required in production for mandatory email verification')
   const app = await createApp({ store })
   const server = createServer(app)
   const configuredOrigins = process.env.CLIENT_ORIGIN?.split(',').map((item) => item.trim()).filter(Boolean)
@@ -448,7 +788,7 @@ export async function startServer({ store } = {}) {
   io.use((socket, next) => {
     try {
       const payload = verifyToken(socket.handshake.auth?.token)
-      const user = app.locals.store.data.users.find((item) => item.id === payload.sub && item.status === 'active')
+      const user = app.locals.store.data.users.find((item) => item.id === payload.sub && item.status === 'active' && item.emailVerified)
       if (!user) throw new Error('Unavailable user')
       socket.user = user
       next()
@@ -460,7 +800,13 @@ export async function startServer({ store } = {}) {
   })
   const port = Number(process.env.PORT || 3001)
   await new Promise((resolveListen) => server.listen(port, '0.0.0.0', resolveListen))
-  console.log(`MentalBridge API listening on http://localhost:${port}`)
+  const role = app.locals.servesClient ? 'web app + API' : 'API only'
+  console.log(`
+MentalBridge ${role} — storage: ${app.locals.storageMode}`)
+  console.log(`  This computer   http://localhost:${port}`)
+  for (const address of lanAddresses()) console.log(`  Phone / tablet  http://${address}:${port}   (same Wi-Fi)`)
+  if (!app.locals.servesClient) console.log('  Run "npm run build" first if you want one URL to serve the app as well.')
+  console.log('')
   return { app, server, io }
 }
 

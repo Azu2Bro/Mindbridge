@@ -1,0 +1,26 @@
+{
+  "name": "MentalBridge — peer support",
+  "short_name": "MentalBridge",
+  "description": "Thoughtful peer support, matched to what you need. Private, verified, human.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#f5f6f1",
+  "theme_color": "#184936",
+  "categories": ["health", "lifestyle", "social"],
+  "lang": "en",
+  "dir": "ltr",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Ask for support", "short_name": "Support", "url": "/?support=open", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Staff portal", "short_name": "Staff", "url": "/staff", "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }] }
+  ]
+}

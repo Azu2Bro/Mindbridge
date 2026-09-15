@@ -1,3 +1,14 @@
+# Render blueprint for MentalBridge.
+#
+# One service: the Express API also serves the built React app from dist/,
+# so a single https address works on a laptop and on a phone.
+#
+# Storage is MongoDB Atlas rather than a persistent disk. The free plan gives
+# each deploy a fresh container filesystem, so a JSON file on disk would be
+# wiped on every restart; Atlas keeps the data across deploys.
+#
+# Every `sync: false` value must be entered in the Render dashboard.
+
 services:
   - type: web
     name: mentalbridge
@@ -7,15 +18,45 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+
+      # Generated once by Render and kept across deploys. Rotating it signs
+      # every existing session out, which is fine.
       - key: JWT_SECRET
         generateValue: true
-      - key: DATA_FILE
-        value: /var/data/mentalbridge.json
+
+      # MongoDB Atlas connection string. Required, or the app falls back to a
+      # JSON file that resets on every deploy.
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DATABASE
+        value: mentalbridge
+
+      # REQUIRED. The server throws on startup in production without SMTP_HOST,
+      # because email verification is mandatory for new signups.
+      # Gmail: smtp.gmail.com / 587 / your address / a 16-character App Password.
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+
+      # Public address of this service, used inside verification and reset
+      # emails. Render fills it in automatically from the service hostname.
+      - key: APP_URL
+        fromService:
+          type: web
+          name: mentalbridge
+          property: host
+
+      # Optional. Without a key the deterministic local analyzer is used.
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_MODEL
         value: gpt-5.6-luna
-    disk:
-      name: mentalbridge-data
-      mountPath: /var/data
-      sizeGB: 1

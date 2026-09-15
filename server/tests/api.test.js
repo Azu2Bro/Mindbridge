@@ -28,6 +28,35 @@ async function call(baseUrl, path, { token, method = 'GET', body } = {}) {
   return { response, data }
 }
 
+test('signup accepts Bengali names, common punctuation, and a blank optional alias', async (context) => {
+  const api = await startTestApi()
+  context.after(async () => {
+    await new Promise((resolve) => api.server.close(resolve))
+    await rm(api.directory, { recursive: true, force: true })
+  })
+
+  const bengaliRegistration = await call(api.baseUrl, '/auth/register', {
+    method: 'POST',
+    body: { displayName: 'তাফহিমুল ইসলাম', anonymousName: 'নীরব নদী', email: 'bangla@example.com', password: 'StrongPass1' },
+  })
+  assert.equal(bengaliRegistration.response.status, 201)
+  assert.equal(bengaliRegistration.data.user.anonymousName, 'নীরব নদী')
+
+  const blankAliasRegistration = await call(api.baseUrl, '/auth/register', {
+    method: 'POST',
+    body: { displayName: "Nadia O'Neil", anonymousName: '   ', email: 'automatic@example.com', password: 'StrongPass1' },
+  })
+  assert.equal(blankAliasRegistration.response.status, 201)
+  assert.match(blankAliasRegistration.data.user.anonymousName, /^GentleRiver\d{3}$/)
+
+  const invalidAlias = await call(api.baseUrl, '/auth/register', {
+    method: 'POST',
+    body: { displayName: 'Private Member', anonymousName: 'email@example.com', email: 'invalid-alias@example.com', password: 'StrongPass1' },
+  })
+  assert.equal(invalidAlias.response.status, 400)
+  assert.equal(invalidAlias.data.error, 'Anonymous name can contain letters, numbers, spaces, periods, apostrophes, underscores, and hyphens')
+})
+
 test('complete member and administration workflow', { timeout: 90000 }, async (context) => {
   const api = await startTestApi()
   context.after(async () => {
@@ -45,8 +74,18 @@ test('complete member and administration workflow', { timeout: 90000 }, async (c
   })
   assert.equal(registration.response.status, 201)
   assert.equal(registration.data.user.role, 'user')
-  assert.ok(registration.data.token)
-  const token = registration.data.token
+  assert.equal(registration.data.verificationRequired, true)
+  assert.ok(registration.data.verificationToken)
+  assert.equal('token' in registration.data, false)
+
+  const blockedLogin = await call(api.baseUrl, '/auth/login', { method: 'POST', body: { email: 'taylor@example.com', password: 'StrongPass1' } })
+  assert.equal(blockedLogin.response.status, 403)
+  assert.equal(blockedLogin.data.verificationRequired, true)
+  const verification = await call(api.baseUrl, '/auth/verify-email', { method: 'POST', body: { token: registration.data.verificationToken } })
+  assert.equal(verification.response.status, 200)
+  const firstLogin = await call(api.baseUrl, '/auth/login', { method: 'POST', body: { email: 'taylor@example.com', password: 'StrongPass1' } })
+  assert.equal(firstLogin.response.status, 200)
+  const token = firstLogin.data.token
 
   const me = await call(api.baseUrl, '/auth/me', { token })
   assert.equal(me.data.user.anonymousName, 'NewHarbor')
@@ -103,6 +142,13 @@ test('complete member and administration workflow', { timeout: 90000 }, async (c
   const reaction = await call(api.baseUrl, `/posts/${post.data.post.id}/reactions`, { token, method: 'POST', body: {} })
   assert.equal(reaction.data.post.likes, 1)
   assert.equal(reaction.data.post.liked, true)
+  const comment = await call(api.baseUrl, `/posts/${post.data.post.id}/comments`, { token, method: 'POST', body: { text: 'Small steps really do count.' } })
+  assert.equal(comment.response.status, 201)
+  const postBookmark = await call(api.baseUrl, `/posts/${post.data.post.id}/bookmark`, { token, method: 'POST', body: {} })
+  assert.deepEqual(postBookmark.data.postBookmarks, [post.data.post.id])
+  const postUpdate = await call(api.baseUrl, `/posts/${post.data.post.id}`, { token, method: 'PUT', body: { title: 'I took two small steps today', body: 'I am noticing progress.' } })
+  assert.equal(postUpdate.data.post.title, 'I took two small steps today')
+  assert.equal(postUpdate.data.post.commentCount, 1)
   const report = await call(api.baseUrl, `/posts/${post.data.post.id}/report`, { token, method: 'POST', body: { reason: 'Testing the moderator workflow' } })
   assert.equal(report.response.status, 201)
 
@@ -116,12 +162,52 @@ test('complete member and administration workflow', { timeout: 90000 }, async (c
   const message = await call(api.baseUrl, `/conversations/${conversationList.data.conversations[0].id}/messages`, { token, method: 'POST', body: { text: 'Hello, thank you for connecting with me.' } })
   assert.equal(message.response.status, 201)
 
-  const adminLogin = await call(api.baseUrl, '/auth/login', { method: 'POST', body: { email: 'admin@mentalbridge.demo', password: 'Demo123!' } })
+  const accepted = await call(api.baseUrl, `/support-requests/${support.data.request.id}`, { token: volunteerLogin.data.token, method: 'PATCH', body: { status: 'in_progress' } })
+  assert.equal(accepted.data.request.status, 'in_progress')
+  const completed = await call(api.baseUrl, `/support-requests/${support.data.request.id}`, { token: volunteerLogin.data.token, method: 'PATCH', body: { status: 'completed' } })
+  assert.equal(completed.data.request.status, 'completed')
+  const feedback = await call(api.baseUrl, `/support-requests/${support.data.request.id}/feedback`, { token, method: 'POST', body: { rating: 5, comment: 'I felt heard.' } })
+  assert.equal(feedback.data.request.feedback.rating, 5)
+
+  const adminMemberPortal = await call(api.baseUrl, '/auth/login', { method: 'POST', body: { email: 'admin@mentalbridge.demo', password: 'Demo123!' } })
+  assert.equal(adminMemberPortal.response.status, 403)
+  assert.equal(adminMemberPortal.data.staffPortal, true)
+  const memberOnStaffPortal = await call(api.baseUrl, '/auth/staff/login', { method: 'POST', body: { email: 'alex@mentalbridge.demo', password: 'Demo123!' } })
+  assert.equal(memberOnStaffPortal.response.status, 403)
+  const adminLogin = await call(api.baseUrl, '/auth/staff/login', { method: 'POST', body: { email: 'admin@mentalbridge.demo', password: 'Demo123!' } })
   assert.equal(adminLogin.response.status, 200)
+  const forbiddenAdminSupport = await call(api.baseUrl, '/support-requests', { token: adminLogin.data.token, method: 'POST', body: { description: 'This administrator should never be able to submit a support request.' } })
+  assert.equal(forbiddenAdminSupport.response.status, 403)
   const stats = await call(api.baseUrl, '/admin/stats', { token: adminLogin.data.token })
   assert.equal(stats.response.status, 200)
   assert.ok(stats.data.stats.activeUsers >= 7)
   assert.equal(stats.data.stats.openReports, 1)
+  const users = await call(api.baseUrl, '/admin/users', { token: adminLogin.data.token })
+  assert.equal(users.response.status, 200)
+  assert.ok(users.data.users.some((item) => item.email === 'taylor@example.com'))
+  const reportUpdate = await call(api.baseUrl, `/admin/reports/${report.data.report.id}`, { token: adminLogin.data.token, method: 'PATCH', body: { status: 'resolved' } })
+  assert.equal(reportUpdate.data.report.status, 'resolved')
+
+  const moderatorAssignment = await call(api.baseUrl, `/admin/users/${registration.data.user.id}`, { token: adminLogin.data.token, method: 'PATCH', body: { role: 'moderator' } })
+  assert.equal(moderatorAssignment.data.user.role, 'moderator')
+  const moderatorLogin = await call(api.baseUrl, '/auth/staff/login', { method: 'POST', body: { email: 'taylor@example.com', password: 'NewStrong2' } })
+  assert.equal(moderatorLogin.response.status, 200)
+  const forbiddenModeratorPost = await call(api.baseUrl, '/posts', { token: moderatorLogin.data.token, method: 'POST', body: { title: 'Moderators cannot publish community stories' } })
+  assert.equal(forbiddenModeratorPost.response.status, 403)
+
+  const secondRegistration = await call(api.baseUrl, '/auth/register', { method: 'POST', body: { displayName: 'Casey Noor', anonymousName: 'WarmSky', email: 'casey@example.com', password: 'StrongPass1' } })
+  await call(api.baseUrl, '/auth/verify-email', { method: 'POST', body: { token: secondRegistration.data.verificationToken } })
+  const volunteerAssignment = await call(api.baseUrl, `/admin/users/${secondRegistration.data.user.id}`, { token: moderatorLogin.data.token, method: 'PATCH', body: { role: 'volunteer' } })
+  assert.equal(volunteerAssignment.data.user.role, 'volunteer')
+
+  const createdResource = await call(api.baseUrl, '/admin/resources', { token: moderatorLogin.data.token, method: 'POST', body: { title: 'A Bangladesh grounding guide', description: 'A short practical grounding guide for difficult moments.', content: 'Place both feet on the floor, breathe slowly, and name what you notice around you.', category: 'Anxiety', type: '3 min read', published: true } })
+  assert.equal(createdResource.response.status, 201)
+  const moderatorDelete = await call(api.baseUrl, `/admin/resources/${createdResource.data.resource.id}`, { token: moderatorLogin.data.token, method: 'DELETE' })
+  assert.equal(moderatorDelete.response.status, 403)
+  const adminDelete = await call(api.baseUrl, `/admin/resources/${createdResource.data.resource.id}`, { token: adminLogin.data.token, method: 'DELETE' })
+  assert.equal(adminDelete.response.status, 200)
+  const removedPost = await call(api.baseUrl, `/admin/posts/${post.data.post.id}`, { token: adminLogin.data.token, method: 'PATCH', body: { removed: true } })
+  assert.equal(removedPost.data.post.removed, true)
 })
 
 test('urgent language is held for moderator review and never auto-matched', { timeout: 90000 }, async (context) => {

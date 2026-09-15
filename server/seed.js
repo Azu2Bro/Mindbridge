@@ -10,13 +10,13 @@ export async function createSeedData() {
     users: [
       {
         id: 'user-alex', email: 'alex@mentalbridge.demo', passwordHash,
-        displayName: 'Alex Morgan', anonymousName: 'StillWaters', role: 'user', status: 'active',
+        displayName: 'Alex Morgan', anonymousName: 'StillWaters', role: 'user', status: 'active', emailVerified: true,
         privacy: { showOnline: true, allowReminders: true }, bookmarks: ['resource-grounding'],
         createdAt: now(), avatarColor: '#e5aa82',
       },
       {
         id: 'volunteer-maya', email: 'maya@mentalbridge.demo', passwordHash,
-        displayName: 'Maya R.', anonymousName: 'Maya R.', role: 'volunteer', status: 'active',
+        displayName: 'Maya R.', anonymousName: 'Maya R.', role: 'volunteer', status: 'active', emailVerified: true,
         expertise: ['Anxiety', 'Work stress', 'Burnout'], livedExperience: ['Workplace anxiety', 'Burnout recovery'],
         availability: 'available', yearsActive: 2, rating: 4.9, avatarColor: '#f2bf8e',
         bio: 'I know how isolating workplace anxiety can feel. I am here to listen without judgment and help you find your next small step.',
@@ -24,7 +24,7 @@ export async function createSeedData() {
       },
       {
         id: 'volunteer-sam', email: 'sam@mentalbridge.demo', passwordHash,
-        displayName: 'Sam K.', anonymousName: 'Sam K.', role: 'volunteer', status: 'active',
+        displayName: 'Sam K.', anonymousName: 'Sam K.', role: 'volunteer', status: 'active', emailVerified: true,
         expertise: ['Loneliness', 'Life transitions', 'Self-esteem'], livedExperience: ['Relocation', 'Social isolation'],
         availability: 'available', yearsActive: 1, rating: 4.8, avatarColor: '#93c5b1',
         bio: 'My own recovery taught me the value of being truly heard. We can take things one conversation at a time.',
@@ -32,7 +32,7 @@ export async function createSeedData() {
       },
       {
         id: 'volunteer-nora', email: 'nora@mentalbridge.demo', passwordHash,
-        displayName: 'Nora A.', anonymousName: 'Nora A.', role: 'volunteer', status: 'active',
+        displayName: 'Nora A.', anonymousName: 'Nora A.', role: 'volunteer', status: 'active', emailVerified: true,
         expertise: ['Low mood', 'Grief', 'Family pressure'], livedExperience: ['Grief', 'Cultural expectations'],
         availability: 'limited', yearsActive: 3, rating: 4.9, avatarColor: '#aab7d4',
         bio: 'I offer a calm, patient space for difficult days and have lived experience navigating grief and cultural expectations.',
@@ -40,12 +40,12 @@ export async function createSeedData() {
       },
       {
         id: 'moderator-lee', email: 'moderator@mentalbridge.demo', passwordHash,
-        displayName: 'Lee Chen', anonymousName: 'Care moderator', role: 'moderator', status: 'active',
+        displayName: 'Lee Chen', anonymousName: 'Care moderator', role: 'moderator', status: 'active', emailVerified: true,
         createdAt: now(), avatarColor: '#8cb7a3',
       },
       {
         id: 'admin-jordan', email: 'admin@mentalbridge.demo', passwordHash,
-        displayName: 'Jordan Admin', anonymousName: 'Administrator', role: 'admin', status: 'active',
+        displayName: 'Jordan Admin', anonymousName: 'Administrator', role: 'admin', status: 'active', emailVerified: true,
         createdAt: now(), avatarColor: '#8498bd',
       },
     ],
@@ -111,6 +111,7 @@ export async function createSeedData() {
       { id: 'notification-2', userId: 'user-alex', type: 'session', title: 'Check-in later today', body: 'Your conversation with Maya begins at 4:30 PM.', read: false, createdAt: new Date(Date.now() - 3600000).toISOString() },
     ],
     passwordResets: [],
+    emailVerifications: [],
     reports: [],
     auditLogs: [],
   }

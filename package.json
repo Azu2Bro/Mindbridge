@@ -6,11 +6,14 @@
   "scripts": {
     "dev": "concurrently -k -n API,WEB -c green,cyan \"npm:dev:server\" \"npm:dev:client\"",
     "dev:client": "vite --host 0.0.0.0",
-    "dev:server": "nodemon server/index.js",
-    "server": "node server/index.js",
+    "dev:server": "nodemon --watch server --watch .env --ext js,json server/index.js",
     "build": "vite build",
+    "icons": "node scripts/generate-icons.mjs",
+    "start": "npm run build && node server/index.js",
+    "server": "node server/index.js",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "node --test server/tests/*.test.js"
+    "test": "node --test server/tests/*.test.js",
+    "test:ui": "node scripts/ui-smoke.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",

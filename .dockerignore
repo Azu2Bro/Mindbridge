@@ -2,5 +2,7 @@ node_modules
 dist
 .data
 .env
-*.png
 .git
+coverage
+# Root-level screenshots only; public/ icons must stay in the build context.
+/*.png

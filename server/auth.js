@@ -27,7 +27,7 @@ export function authRequired(storeInstance) {
       const token = header.startsWith('Bearer ') ? header.slice(7) : null
       if (!token) return res.status(401).json({ error: 'Authentication required' })
       const payload = verifyToken(token)
-      const user = storeInstance.data.users.find((item) => item.id === payload.sub && item.status === 'active')
+      const user = storeInstance.data.users.find((item) => item.id === payload.sub && item.status === 'active' && item.emailVerified)
       if (!user) return res.status(401).json({ error: 'Account is unavailable' })
       req.user = user
       next()
