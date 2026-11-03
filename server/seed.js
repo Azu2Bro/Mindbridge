@@ -2,6 +2,65 @@ import bcrypt from 'bcryptjs'
 
 const now = () => new Date().toISOString()
 
+export function createDemoMatchingVolunteers(passwordHash, createdAt = now()) {
+  return [
+    {
+      id: 'volunteer-maya', email: 'maya@mentalbridge.demo', passwordHash,
+      displayName: 'Maya R.', anonymousName: 'Maya R.', role: 'volunteer', status: 'active', emailVerified: true,
+      expertise: ['Anxious thoughts', 'Work stress', 'Burnout'], livedExperience: ['Work stress', 'Anxious thoughts'],
+      communicationStyle: 'Warm and reflective', languages: ['English', 'Bangla'],
+      availability: 'available', yearsActive: 2, rating: 4.9, maxActiveCases: 4, avatarColor: '#f2bf8e',
+      bio: 'I know how isolating workplace anxiety can feel. I am here to listen without judgment and help you find your next small step.',
+      createdAt,
+    },
+    {
+      id: 'volunteer-sam', email: 'sam@mentalbridge.demo', passwordHash,
+      displayName: 'Sam K.', anonymousName: 'Sam K.', role: 'volunteer', status: 'active', emailVerified: true,
+      expertise: ['Loneliness', 'Life transitions', 'Self-esteem'], livedExperience: ['Loneliness', 'Self-esteem'],
+      communicationStyle: 'Patient and conversational', languages: ['English', 'Hindi'],
+      availability: 'available', yearsActive: 1, rating: 4.8, maxActiveCases: 3, avatarColor: '#93c5b1',
+      bio: 'My own recovery taught me the value of being truly heard. We can take things one conversation at a time.',
+      createdAt,
+    },
+    {
+      id: 'volunteer-nora', email: 'nora@mentalbridge.demo', passwordHash,
+      displayName: 'Nora A.', anonymousName: 'Nora A.', role: 'volunteer', status: 'active', emailVerified: true,
+      expertise: ['Low mood', 'Grief', 'Family pressure'], livedExperience: ['Grief', 'Family pressure'],
+      communicationStyle: 'Calm and gentle', languages: ['English', 'Arabic'],
+      availability: 'limited', yearsActive: 3, rating: 4.9, maxActiveCases: 2, avatarColor: '#aab7d4',
+      bio: 'I offer a calm, patient space for difficult days and have lived experience navigating grief and cultural expectations.',
+      createdAt,
+    },
+    {
+      id: 'volunteer-farah', email: 'farah@mentalbridge.demo', passwordHash,
+      displayName: 'Farah H.', anonymousName: 'Farah H.', role: 'volunteer', status: 'active', emailVerified: true,
+      expertise: ['Family pressure', 'Self-esteem', 'Anxious thoughts'], livedExperience: ['Family pressure', 'Self-esteem'],
+      communicationStyle: 'Encouraging and culturally aware', languages: ['Bangla', 'English'],
+      availability: 'available', yearsActive: 2, rating: 4.7, maxActiveCases: 3, avatarColor: '#d7a6b8',
+      bio: 'I understand how family expectations can affect confidence and peace of mind. I listen carefully and move at your pace.',
+      createdAt,
+    },
+    {
+      id: 'volunteer-rafi', email: 'rafi@mentalbridge.demo', passwordHash,
+      displayName: 'Rafi T.', anonymousName: 'Rafi T.', role: 'volunteer', status: 'active', emailVerified: true,
+      expertise: ['Sleep & energy', 'Work stress', 'Low mood'], livedExperience: ['Burnout', 'Sleep & energy'],
+      communicationStyle: 'Practical and structured', languages: ['Bangla', 'English'],
+      availability: 'limited', yearsActive: 4, rating: 4.8, maxActiveCases: 2, avatarColor: '#89b8c7',
+      bio: 'I have navigated burnout and disrupted sleep. I can offer a steady space to unpack what is draining your energy.',
+      createdAt,
+    },
+    {
+      id: 'volunteer-elena', email: 'elena@mentalbridge.demo', passwordHash,
+      displayName: 'Elena P.', anonymousName: 'Elena P.', role: 'volunteer', status: 'active', emailVerified: true,
+      expertise: ['Grief', 'Loneliness', 'Low mood'], livedExperience: ['Grief', 'Relocation'],
+      communicationStyle: 'Quiet and compassionate', languages: ['English', 'Spanish'],
+      availability: 'unavailable', yearsActive: 3, rating: 4.9, maxActiveCases: 3, avatarColor: '#b5a6d7',
+      bio: 'I support people moving through loss, loneliness, and major transitions. I am currently away and not accepting new connections.',
+      createdAt,
+    },
+  ]
+}
+
 export async function createSeedData() {
   const passwordHash = await bcrypt.hash('Demo123!', 12)
 
@@ -14,30 +73,7 @@ export async function createSeedData() {
         privacy: { showOnline: true, allowReminders: true }, bookmarks: ['resource-grounding'],
         createdAt: now(), avatarColor: '#e5aa82',
       },
-      {
-        id: 'volunteer-maya', email: 'maya@mentalbridge.demo', passwordHash,
-        displayName: 'Maya R.', anonymousName: 'Maya R.', role: 'volunteer', status: 'active', emailVerified: true,
-        expertise: ['Anxiety', 'Work stress', 'Burnout'], livedExperience: ['Workplace anxiety', 'Burnout recovery'],
-        availability: 'available', yearsActive: 2, rating: 4.9, avatarColor: '#f2bf8e',
-        bio: 'I know how isolating workplace anxiety can feel. I am here to listen without judgment and help you find your next small step.',
-        createdAt: now(),
-      },
-      {
-        id: 'volunteer-sam', email: 'sam@mentalbridge.demo', passwordHash,
-        displayName: 'Sam K.', anonymousName: 'Sam K.', role: 'volunteer', status: 'active', emailVerified: true,
-        expertise: ['Loneliness', 'Life transitions', 'Self-esteem'], livedExperience: ['Relocation', 'Social isolation'],
-        availability: 'available', yearsActive: 1, rating: 4.8, avatarColor: '#93c5b1',
-        bio: 'My own recovery taught me the value of being truly heard. We can take things one conversation at a time.',
-        createdAt: now(),
-      },
-      {
-        id: 'volunteer-nora', email: 'nora@mentalbridge.demo', passwordHash,
-        displayName: 'Nora A.', anonymousName: 'Nora A.', role: 'volunteer', status: 'active', emailVerified: true,
-        expertise: ['Low mood', 'Grief', 'Family pressure'], livedExperience: ['Grief', 'Cultural expectations'],
-        availability: 'limited', yearsActive: 3, rating: 4.9, avatarColor: '#aab7d4',
-        bio: 'I offer a calm, patient space for difficult days and have lived experience navigating grief and cultural expectations.',
-        createdAt: now(),
-      },
+      ...createDemoMatchingVolunteers(passwordHash),
       {
         id: 'moderator-lee', email: 'moderator@mentalbridge.demo', passwordHash,
         displayName: 'Lee Chen', anonymousName: 'Care moderator', role: 'moderator', status: 'active', emailVerified: true,

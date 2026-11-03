@@ -193,7 +193,7 @@ h1, h2, h3, .brand { font-family: 'Manrope', 'DM Sans', sans-serif; }
 }
 
 @media (max-width: 460px) {
-  .page-heading { max-width: 125px; }.topbar-actions .notification-button { display: none; }.hero-card { min-height: 380px; }.dashboard-rail { grid-template-columns: 1fr; }.dashboard-rail .resource-spotlight { grid-column: auto; }.section-heading .text-button,.section-heading .safe-label { display: none; }.mood-row { grid-template-columns: repeat(5, minmax(48px,1fr)); overflow-x: auto; }.match-profile { align-items: flex-start; }.match-name { align-items: flex-start; flex-direction: column; gap: 4px; }.match-actions { flex-direction: column; }.modal-footer { align-items: stretch; flex-direction: column-reverse; }.modal-footer .button { width: 100%; }.modal-footer > div:first-child { align-items: stretch; }.volunteer-copy small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }.community-post { padding: 18px 16px; }.community-post-actions button:nth-child(3) { display: none; }.pattern-card { align-items: flex-start; }.pattern-icon { width: 46px; height: 46px; }.auth-panel { padding: 14px; }.auth-card { padding: 27px 20px; }.auth-field-row { grid-template-columns: 1fr; gap: 0; }
+  .page-heading { max-width: 125px; }.topbar-actions .notification-button { display: inline-flex; }.hero-card { min-height: 380px; }.dashboard-rail { grid-template-columns: 1fr; }.dashboard-rail .resource-spotlight { grid-column: auto; }.section-heading .text-button,.section-heading .safe-label { display: none; }.mood-row { grid-template-columns: repeat(5, minmax(48px,1fr)); overflow-x: auto; }.match-profile { align-items: flex-start; }.match-name { align-items: flex-start; flex-direction: column; gap: 4px; }.match-actions { flex-direction: column; }.modal-footer { align-items: stretch; flex-direction: column-reverse; }.modal-footer .button { width: 100%; }.modal-footer > div:first-child { align-items: stretch; }.volunteer-copy small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }.community-post { padding: 18px 16px; }.community-post-actions button:nth-child(3) { display: none; }.pattern-card { align-items: flex-start; }.pattern-icon { width: 46px; height: 46px; }.auth-panel { padding: 14px; }.auth-card { padding: 27px 20px; }.auth-field-row { grid-template-columns: 1fr; gap: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -598,4 +598,24 @@ body { font-size: 16px; line-height: 1.55; }
 .notification-item b, .resource-card p, .resource-card h3, .queue-row span,
 .audit-list b, .audit-list small, .session-note p, .empty-copy, .history-item small {
   overflow-wrap: anywhere;
+}
+
+/* Readable notifications in both themes and within narrow viewports. */
+.notification-popover { width: min(400px, calc(100vw - 24px)); color: var(--ink); background: var(--paper); }
+.notification-list { max-height: min(480px, calc(100dvh - 170px)); overflow-y: auto; overscroll-behavior: contain; }
+.notification-item { border-color: var(--line); align-items: flex-start; }
+.notification-item.unread { background: var(--green-soft); }
+.notification-item p { white-space: normal; overflow-wrap: anywhere; color: var(--ink-2); line-height: 1.5; }
+.notification-item b { overflow-wrap: anywhere; }
+.notification-item small { color: var(--muted); }
+.notification-item .status-icon { flex-shrink: 0; }
+.notification-popover .popover-head { gap: 10px; border-color: var(--line); }
+.notification-popover button:disabled { opacity: .55; cursor: default; }
+.resource-source { display: block; margin-top: 10px; color: var(--muted); }
+@media (max-width: 700px) {
+  .notification-popover { position: fixed; top: 70px; right: 12px; left: auto; }
+  .topbar { gap: 8px; }
+  .page-heading { min-width: 0; flex: 1; }
+  .page-heading h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .topbar-actions { flex-shrink: 0; gap: 3px; }
 }

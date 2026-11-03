@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { ArrowRight, BookOpen, HeartHandshake, LifeBuoy, LockKeyhole, Menu, Moon, ShieldCheck, Sparkles, Sun, UserRoundCheck, Users, X } from 'lucide-react'
+import { ArrowRight, BookOpen, HeartHandshake, LifeBuoy, Menu, Moon, ShieldCheck, Sparkles, Sun, UserRoundCheck, Users, X } from 'lucide-react'
 import AuthScreen from './AuthScreen'
 
-export default function LandingPage({ theme, toggleTheme }) {
+export default function LandingPage({ theme, toggleTheme, onAccountFlowComplete }) {
   const params = new URLSearchParams(window.location.search)
-  const automaticMode = params.has('verify') ? 'login' : params.has('reset') ? 'reset' : null
+  const automaticMode = params.has('verify') ? 'login' : params.has('reset') ? 'reset' : params.get('mode') === 'forgot' ? 'forgot' : null
   const [auth, setAuth] = useState(automaticMode ? { mode: automaticMode } : null)
   const [menuOpen, setMenuOpen] = useState(false)
   const openAuth = (mode) => { setAuth({ mode }); setMenuOpen(false) }
@@ -12,7 +12,7 @@ export default function LandingPage({ theme, toggleTheme }) {
   return <div className="landing-page">
     <header className="landing-nav">
       <a className="landing-brand" href="#top"><span className="brand-mark"><HeartHandshake size={23} /></span><span>Mental<span>Bridge</span></span></a>
-      <nav className={menuOpen ? 'open' : ''} aria-label="Landing navigation"><a href="#how" onClick={() => setMenuOpen(false)}>How it works</a><a href="#safety" onClick={() => setMenuOpen(false)}>Safety</a><a href="#resources" onClick={() => setMenuOpen(false)}>Resources</a><a className="landing-staff-login" href="/staff" onClick={() => setMenuOpen(false)}><LockKeyhole size={14} /> Staff portal</a><button className="landing-login" onClick={() => openAuth('login')}>Login</button><button className="button button-coral" onClick={() => openAuth('register')}>Sign up</button></nav>
+      <nav className={menuOpen ? 'open' : ''} aria-label="Landing navigation"><a href="#how" onClick={() => setMenuOpen(false)}>How it works</a><a href="#safety" onClick={() => setMenuOpen(false)}>Safety</a><a href="#resources" onClick={() => setMenuOpen(false)}>Resources</a><button className="landing-login" onClick={() => openAuth('login')}>Login</button><button className="button button-coral" onClick={() => openAuth('register')}>Sign up</button></nav>
       <div className="landing-nav-actions"><button className="theme-toggle" aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} onClick={toggleTheme}>{theme === 'dark' ? <Sun size={19} /> : <Moon size={19} />}</button><button className="landing-menu" aria-label="Toggle navigation" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X size={21} /> : <Menu size={21} />}</button></div>
     </header>
 
@@ -35,6 +35,6 @@ export default function LandingPage({ theme, toggleTheme }) {
       <section className="landing-section landing-resources" id="resources"><div className="resource-preview"><BookOpen size={35} /><span>Grounding</span><b>Return to the present, one sense at a time.</b></div><div><span className="eyebrow">PRACTICAL RESOURCE LIBRARY</span><h2>Helpful tools for real-life moments.</h2><p>Explore moderator-reviewed guides for anxiety, sleep, burnout, mindfulness, loneliness, and everyday self-care.</p><button className="button button-dark" onClick={() => openAuth('register')}>Explore after sign up <ArrowRight size={16} /></button></div></section>
     </main>
     <footer className="landing-footer"><div className="landing-brand"><span className="brand-mark"><HeartHandshake size={20} /></span><span>Mental<span>Bridge</span></span></div><p>Peer support coordination—not diagnosis, therapy, or emergency response.</p><span>Support: <a href="mailto:tafhimul456@gmail.com">tafhimul456@gmail.com</a></span><span>Bangladesh emergency: <a href="tel:999">999</a></span></footer>
-    {auth && <AuthScreen key={auth.mode} initialMode={auth.mode} onClose={() => { window.history.replaceState({}, '', window.location.pathname); setAuth(null) }} />}
+    {auth && <AuthScreen key={auth.mode} initialMode={auth.mode} onClose={() => { window.history.replaceState({}, '', window.location.pathname); setAuth(null); onAccountFlowComplete?.() }} />}
   </div>
 }

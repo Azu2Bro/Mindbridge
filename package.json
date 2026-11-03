@@ -4,16 +4,20 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k -n API,WEB -c green,cyan \"npm:dev:server\" \"npm:dev:client\"",
+    "dev": "concurrently -k -n AI,API,STAFF,WEB -c yellow,green,magenta,cyan \"npm:dev:ai\" \"npm:dev:server\" \"npm:dev:staff\" \"npm:dev:client\"",
+    "dev:ai": "node scripts/start-ai.mjs",
     "dev:client": "vite --host 0.0.0.0",
     "dev:server": "nodemon --watch server --watch .env --ext js,json server/index.js",
+    "dev:staff": "nodemon --watch server --watch .env --ext js,json server/staff-auth-server.js",
     "build": "vite build",
     "icons": "node scripts/generate-icons.mjs",
     "start": "npm run build && node server/index.js",
     "server": "node server/index.js",
+    "staff:server": "node server/staff-auth-server.js",
     "preview": "vite preview --host 0.0.0.0",
     "test": "node --test server/tests/*.test.js",
-    "test:ui": "node scripts/ui-smoke.mjs"
+    "test:ui": "node scripts/ui-smoke.mjs",
+    "ai:serve": "node scripts/start-ai.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",

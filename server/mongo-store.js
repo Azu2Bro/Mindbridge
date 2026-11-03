@@ -34,6 +34,21 @@ export class MongoStore {
     )
   }
 
+  async findUserByEmail(email) {
+    const document = await this.collection.findOne(
+      { _id: 'mentalbridge' },
+      { projection: { 'payload.users': 1 } },
+    )
+    return document?.payload?.users?.find((user) => user.email === email) || null
+  }
+
+  async appendAuditLog(entry) {
+    await this.collection.updateOne(
+      { _id: 'mentalbridge' },
+      { $push: { 'payload.auditLogs': entry } },
+    )
+  }
+
   async mutate(mutator) {
     const operation = this.writeQueue.then(async () => {
       const result = await mutator(this.data)

@@ -3,6 +3,8 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
+ARG VITE_STAFF_AUTH_URL
+ENV VITE_STAFF_AUTH_URL=$VITE_STAFF_AUTH_URL
 RUN npm run build
 
 FROM node:24-alpine

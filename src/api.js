@@ -1,20 +1,24 @@
 import { io } from 'socket.io-client'
 
 const TOKEN_KEY = 'mentalbridge-token'
+const staffAuthHost = import.meta.env.VITE_STAFF_AUTH_URL || (import.meta.env.DEV ? 'http://127.0.0.1:3002' : '')
+const staffAuthOrigin = staffAuthHost ? ( /^https?:\/\//.test(staffAuthHost) ? staffAuthHost : `https://${staffAuthHost}` ).replace(/\/$/, '') : ''
+const staffApiBase = staffAuthOrigin ? `${staffAuthOrigin}/api` : ''
 
 export const session = {
   getToken: () => localStorage.getItem(TOKEN_KEY),
   setToken: (token) => token ? localStorage.setItem(TOKEN_KEY, token) : localStorage.removeItem(TOKEN_KEY),
 }
 
-async function request(path, options = {}) {
+async function request(path, options = {}, apiBase = '/api') {
+  const { timeoutMs = 20000, ...fetchOptions } = options
   const token = session.getToken()
   const controller = new AbortController()
-  const timeout = window.setTimeout(() => controller.abort(), 20000)
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs)
   let response
   try {
-    response = await fetch(`/api${path}`, {
-      ...options,
+    response = await fetch(`${apiBase}${path}`, {
+      ...fetchOptions,
       signal: controller.signal,
       headers: {
         ...(options.body ? { 'Content-Type': 'application/json' } : {}),
@@ -46,7 +50,10 @@ const json = (method, body) => ({ method, body: JSON.stringify(body) })
 export const api = {
   health: () => request('/health'),
   login: (credentials) => request('/auth/login', json('POST', credentials)),
-  staffLogin: (credentials) => request('/auth/staff/login', json('POST', credentials)),
+  staffLogin: (credentials) => {
+    if (!staffApiBase) return Promise.reject(new Error('The staff authentication server is not configured.'))
+    return request('/auth/staff/login', json('POST', credentials), staffApiBase)
+  },
   register: (details) => request('/auth/register', json('POST', details)),
   verifyEmail: (token) => request('/auth/verify-email', json('POST', { token })),
   resendVerification: (email) => request('/auth/resend-verification', json('POST', { email })),
@@ -55,8 +62,8 @@ export const api = {
   me: () => request('/auth/me'),
   updateProfile: (updates) => request('/users/me', json('PUT', updates)),
   dashboard: () => request('/dashboard'),
-  analyze: (text) => request('/ai/analyze', json('POST', { text })),
-  volunteers: (tags = []) => request(`/volunteers?tags=${encodeURIComponent(tags.join(','))}`),
+  analyze: (text) => request('/ai/analyze', { ...json('POST', { text }), timeoutMs: 55000 }),
+  volunteers: (tags = [], priorities = []) => request(`/volunteers?tags=${encodeURIComponent(tags.join(','))}&priorities=${encodeURIComponent(priorities.join(','))}`),
   supportRequests: () => request('/support-requests'),
   createSupportRequest: (supportRequest) => request('/support-requests', json('POST', supportRequest)),
   updateSupportRequest: (requestId, updates) => request(`/support-requests/${requestId}`, json('PATCH', updates)),

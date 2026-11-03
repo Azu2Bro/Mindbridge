@@ -79,42 +79,6 @@ const moods = [
   { score: 5, face: '😊', label: 'Great', color: '#2c775c' },
 ]
 
-const volunteers = [
-  {
-    id: 1,
-    name: 'Maya R.',
-    initials: 'MR',
-    role: 'Peer supporter',
-    match: 96,
-    color: '#f2bf8e',
-    experience: 'Anxiety · Work stress · Burnout',
-    bio: 'I know how isolating workplace anxiety can feel. I am here to listen without judgment and help you find your next small step.',
-    status: 'Available today',
-  },
-  {
-    id: 2,
-    name: 'Sam K.',
-    initials: 'SK',
-    role: 'Peer supporter',
-    match: 91,
-    color: '#93c5b1',
-    experience: 'Loneliness · Life transitions · Self-esteem',
-    bio: 'My own recovery taught me the value of being truly heard. We can take things one conversation at a time.',
-    status: 'Available tomorrow',
-  },
-  {
-    id: 3,
-    name: 'Nora A.',
-    initials: 'NA',
-    role: 'Peer supporter',
-    match: 87,
-    color: '#aab7d4',
-    experience: 'Low mood · Grief · Family pressure',
-    bio: 'I offer a calm, patient space for difficult days and have lived experience navigating grief and cultural expectations.',
-    status: 'Available Wed',
-  },
-]
-
 const starterPosts = [
   {
     id: 1,
@@ -189,11 +153,22 @@ function useStoredState(key, initialValue) {
 function App() {
   const { user, loading: authLoading, logout, refreshUser } = useAuth()
   const [active, setActive] = useState('home')
+  const [accountLinkOpen, setAccountLinkOpen] = useState(() => { const params = new URLSearchParams(window.location.search); return params.has('verify') || params.has('reset') || params.get('mode') === 'forgot' })
   const [theme, setTheme] = useStoredState('mentalbridge-theme', window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [supportOpen, setSupportOpen] = useState(() => new URLSearchParams(window.location.search).get('support') === 'open')
   const [profileOpen, setProfileOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [unreadNotifications, setUnreadNotifications] = useState(0)
+  useEffect(() => {
+    if (!user) return
+    const update = () => api.notifications().then(({ notifications }) => setUnreadNotifications(notifications.filter((item) => !item.read).length)).catch(() => {})
+    update()
+    const socket = connectRealtime()
+    socket.on('notification', update)
+    window.addEventListener('mentalbridge:notifications', update)
+    return () => { socket.disconnect(); window.removeEventListener('mentalbridge:notifications', update) }
+  }, [user?.id])
   const [toast, setToast] = useState('')
   const [navCounts, setNavCounts] = useState({ support: 0, messages: 0 })
   const [moodEntries, setMoodEntries] = useStoredState('mentalbridge-moods', [
@@ -304,10 +279,10 @@ function App() {
   }[active]
 
   if (authLoading) return <div className="app-loading"><span className="brand-mark"><HeartHandshake size={24} /></span><LoaderCircle className="spin" size={22} /><p>Opening your private space…</p></div>
-  if (!user) {
+  if (!user || accountLinkOpen) {
     const staffRoute = /^\/(staff|admin|moderator)\/?$/i.test(window.location.pathname)
     if (staffRoute) return <StaffLogin theme={theme} />
-    return <LandingPage theme={theme} toggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
+    return <LandingPage onAccountFlowComplete={() => setAccountLinkOpen(false)} theme={theme} toggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
   }
 
   return (
@@ -326,8 +301,8 @@ function App() {
               <Search size={18} /><span>Search</span><kbd>Ctrl K</kbd>
             </button>
             <div className="popover-wrap">
-              <button className="icon-button notification-button" aria-label="Notifications" onClick={() => { setNotificationsOpen(!notificationsOpen); setProfileOpen(false) }}>
-                <Bell size={19} /><span className="notification-dot" />
+              <button className="icon-button notification-button" aria-label="Notifications" aria-expanded={notificationsOpen} onClick={() => { setNotificationsOpen(!notificationsOpen); setProfileOpen(false) }}>
+                <Bell size={19} />{unreadNotifications > 0 && <span className="notification-dot" />}
               </button>
               {notificationsOpen && <NotificationPopover onClose={() => setNotificationsOpen(false)} />}
             </div>
@@ -406,9 +381,9 @@ function Sidebar({ active, navigate, open, onClose, user, counts }) {
         </nav>
         <div className="sidebar-spacer" />
         {user.role === 'user' && <div className="supporter-card">
-          <div className="mini-avatars"><span>MR</span><span>SK</span><span>+24</span></div>
-          <h3>Someone is here</h3>
-          <p>24 trained peer supporters are available this week.</p>
+          <HeartHandshake size={24} />
+          <h3>Find a peer connection</h3>
+          <p>See available volunteers or join the support waiting queue.</p>
           <button onClick={() => navigate('support')}>Find support <ArrowRight size={15} /></button>
         </div>}
         <div className="sidebar-bottom">
@@ -557,7 +532,7 @@ function LegacySupportView({ onSupport, onNavigate }) {
         {matched ? <div className="match-card featured-match">
           <div className="match-profile">
             <span className="avatar xl" style={{ background: matched.avatarColor }}>{matched.displayName.split(' ').map((part) => part[0]).join('').slice(0, 2)}<span className="online-dot" /></span>
-            <div><div className="match-name"><h3>{matched.displayName}</h3><span><Sparkles size={13} /> {current.matchScore}% match</span></div><p>Peer supporter · {matched.yearsActive || 1} years on MentalBridge</p><div className="expertise-row">{(matched.expertise || []).map((tag) => <span key={tag}>{tag}</span>)}</div></div>
+            <div><div className="match-name"><h3>{matched.displayName}</h3><span><Sparkles size={13} /> {current.matchScore}% match</span></div><p>Peer supporter · {matched.yearsActive || 0} years on MentalBridge</p><div className="expertise-row">{(matched.expertise || []).map((tag) => <span key={tag}>{tag}</span>)}</div></div>
           </div>
           <blockquote>“{matched.bio}”</blockquote>
           <div className="match-actions"><button className="button button-dark" onClick={() => onNavigate('messages')}>Message {matched.displayName.split(' ')[0]} <MessageCircle size={16} /></button><button className="button button-secondary">View support plan</button></div>
@@ -596,7 +571,7 @@ function SupportView({ onSupport, onNavigate, user, showToast }) {
 
   if (['volunteer', 'moderator', 'admin'].includes(user.role)) return <SupportQueueView requests={requests} loading={loading} error={error} reload={load} user={user} showToast={showToast} />
 
-  const current = requests.find((request) => ['assigned', 'in_progress', 'moderator_review'].includes(request.status))
+  const current = requests.find((request) => ['pending', 'assigned', 'in_progress', 'moderator_review'].includes(request.status))
   const matched = current?.volunteer
   const cancelRequest = async () => {
     try { await api.cancelSupportRequest(current.id); await load(); showToast('Support request cancelled') }
@@ -612,7 +587,7 @@ function SupportView({ onSupport, onNavigate, user, showToast }) {
     {error && <InlineError message={error} onRetry={load} />}
     <div className="status-strip"><div><span className="status-icon coral"><Clock3 size={19} /></span><p><b>{requests.filter((request) => !['completed', 'declined'].includes(request.status)).length} active request</b><small>{loading ? 'Loading…' : current ? current.status.replaceAll('_', ' ') : 'Ready when you are'}</small></p></div><div><span className="status-icon sage"><UserRoundCheck size={19} /></span><p><b>{matched?.displayName || (current?.riskLevel === 'urgent' ? 'Moderator review' : 'No current match')}</b><small>{matched ? `${current.matchScore}% relevance` : 'We will keep you informed'}</small></p></div><div><span className="status-icon gold"><MessageCircle size={19} /></span><p><b>{matched ? 'Private messaging ready' : 'Private messaging'}</b><small>{matched ? 'Open your conversation anytime' : 'Available after matching'}</small></p></div></div>
     <section className="section-block"><div className="section-heading"><div><span className="eyebrow">YOUR CURRENT MATCH</span><h2>Support that feels understood</h2></div><span className="safe-label"><LockKeyhole size={14} /> Only visible to you and your care team</span></div>
-      {matched ? <div className="match-card featured-match"><div className="match-profile"><span className="avatar xl" style={{ background: matched.avatarColor }}>{matched.displayName.split(' ').map((part) => part[0]).join('').slice(0, 2)}<span className="online-dot" /></span><div><div className="match-name"><h3>{matched.displayName}</h3><span><Sparkles size={13} /> {current.matchScore}% match</span></div><p>Peer supporter · {matched.yearsActive || 1} years on MentalBridge</p><div className="expertise-row">{(matched.expertise || []).map((tag) => <span key={tag}>{tag}</span>)}</div></div></div><blockquote>“{matched.bio}”</blockquote><div className="match-actions"><button className="button button-dark" onClick={() => onNavigate('messages')}>Message {matched.displayName.split(' ')[0]} <MessageCircle size={16} /></button><button className="button button-secondary" onClick={() => setPlanOpen(true)}>View support plan</button><button className="text-button danger" onClick={cancelRequest}>Cancel request</button></div></div> : current ? <div className="empty-match"><ShieldCheck size={28} /><div><h3>Your request is being reviewed</h3><p>A moderator will review it before any peer match is made. MentalBridge is not an emergency service.</p></div></div> : <div className="empty-match"><HeartHandshake size={28} /><div><h3>Your next connection can start here</h3><p>Create a private support request and review your recommended peer supporters.</p></div><button className="button button-dark" onClick={onSupport}>Find peer support</button></div>}
+      {matched ? <div className="match-card featured-match"><div className="match-profile"><span className="avatar xl" style={{ background: matched.avatarColor }}>{matched.displayName.split(' ').map((part) => part[0]).join('').slice(0, 2)}<span className="online-dot" /></span><div><div className="match-name"><h3>{matched.displayName}</h3><span><Sparkles size={13} /> {current.matchScore}% match</span></div><p>Peer supporter · {matched.yearsActive || 0} years on MentalBridge</p><div className="expertise-row">{(matched.expertise || []).map((tag) => <span key={tag}>{tag}</span>)}</div></div></div><blockquote>“{matched.bio}”</blockquote><div className="match-actions"><button className="button button-dark" onClick={() => onNavigate('messages')}>Message {matched.displayName.split(' ')[0]} <MessageCircle size={16} /></button><button className="button button-secondary" onClick={() => setPlanOpen(true)}>View support plan</button><button className="text-button danger" onClick={cancelRequest}>Cancel request</button></div></div> : current ? <div className="empty-match"><ShieldCheck size={28} /><div><h3>{current.status === 'pending' ? 'Your request is in the waiting queue' : 'Your request is being reviewed'}</h3><p>{current.status === 'pending' ? 'The care team can arrange a connection when a volunteer becomes available.' : 'A moderator will review it before any peer match is made.'} MentalBridge is not an emergency service.</p></div></div> : <div className="empty-match"><HeartHandshake size={28} /><div><h3>Your next connection can start here</h3><p>Create a private support request and review your recommended peer supporters.</p></div><button className="button button-dark" onClick={onSupport}>Find peer support</button></div>}
     </section>
     <section className="section-block"><div className="section-heading"><div><span className="eyebrow">REQUEST HISTORY</span><h2>Your support journey</h2></div></div><div className="history-list">{requests.length ? requests.slice().reverse().map((request) => <div className="history-item" key={request.id}><div><b>{request.tags.join(' · ')}</b><p>{request.summary}</p><small>{new Date(request.createdAt).toLocaleString()} · {request.status.replaceAll('_', ' ')}</small></div>{request.status === 'completed' && !request.feedback && <button className="button button-secondary" onClick={() => setFeedbackId(request.id)}>Leave feedback</button>}{request.feedback && <span className="rating-display">{'★'.repeat(request.feedback.rating)}</span>}</div>) : <p className="empty-copy">No support requests yet.</p>}</div></section>
     {planOpen && <SimpleModal title="Your support plan" onClose={() => setPlanOpen(false)}><p><b>Current focus:</b> {current.priorities.join(', ')}</p><p><b>Supporter:</b> {matched.displayName}</p><p><b>Next step:</b> Continue your private conversation at a pace that feels comfortable. You can pause or cancel at any time.</p><button className="button button-dark" onClick={() => { setPlanOpen(false); onNavigate('messages') }}>Open conversation</button></SimpleModal>}
@@ -631,13 +606,20 @@ function SupportQueueView({ requests, loading, error, reload, user, showToast })
   return <div className="support-layout"><section className="support-intro-card"><div className="support-intro-copy"><span className="eyebrow light"><UserRoundCheck size={14} /> PEER-SUPPORT WORKSPACE</span><h2>{user.role === 'volunteer' ? 'Your assigned connections.' : 'Coordinate support safely.'}</h2><p>Review user-approved summaries, manage requests, and keep members informed through status updates.</p></div><div className="privacy-panel"><ShieldCheck size={27} /><div><b>Privacy protected</b><p>Members are identified by anonymous display names in coordination views.</p></div></div></section>{error && <InlineError message={error} onRetry={reload} />}<section className="section-block"><div className="section-heading"><div><span className="eyebrow">SUPPORT QUEUE</span><h2>{loading ? 'Loading requests…' : `${requests.length} request${requests.length === 1 ? '' : 's'}`}</h2></div></div><div className="request-card-list">{requests.map((request) => <article className="request-card" key={request.id}><div className="request-card-head"><div><span className={`risk-pill ${request.riskLevel}`}>{request.riskLevel}</span><h3>{request.user?.displayName || 'Anonymous member'}</h3></div><span className="status-badge">{request.status.replaceAll('_', ' ')}</span></div><p>{request.summary}</p><div className="expertise-row">{request.tags.map((tag) => <span key={tag}>{tag}</span>)}</div>{request.sessionNote && <div className="session-note"><b>Moderator-only note</b><p>{request.sessionNote}</p></div>}<div className="request-actions">{request.status === 'assigned' && <button className="button button-dark" disabled={busy === request.id} onClick={() => update(request.id, { status: 'in_progress' })}>Accept & begin</button>}{request.status === 'in_progress' && <button className="button button-dark" disabled={busy === request.id} onClick={() => update(request.id, { status: 'completed' })}>Mark completed</button>}{request.status === 'moderator_review' && user.role !== 'volunteer' && <button className="button button-dark" disabled={busy === request.id} onClick={() => update(request.id, { status: 'assigned' })}>Mark reviewed</button>}{!['completed', 'declined'].includes(request.status) && <button className="button button-secondary" disabled={busy === request.id} onClick={() => update(request.id, { status: 'declined' })}>Decline</button>}</div></article>)}{!loading && !requests.length && <p className="empty-copy">There are no requests in your queue.</p>}</div></section></div>
 }
 
+const matchingDemoPrompts = [
+  { label: 'Work stress + sleep', text: 'Work deadlines have been overwhelming me, I keep worrying at night, and I am struggling to sleep.' },
+  { label: 'Loneliness + confidence', text: 'I have felt isolated since moving and my confidence has dropped. I would value someone patient to talk with.' },
+  { label: 'Grief + low mood', text: 'I am grieving someone close to me and have been feeling low and disconnected from the people around me.' },
+  { label: 'Family pressure', text: 'Family expectations are making me anxious and I keep feeling that I am not good enough.' },
+]
+
 function SupportModal({ onClose, onComplete }) {
   const [step, setStep] = useState(1)
   const [text, setText] = useState('')
   const [loading, setLoading] = useState(false)
   const [selectedVolunteer, setSelectedVolunteer] = useState(null)
   const [analysis, setAnalysis] = useState(() => analyzeConcern(''))
-  const [matchedVolunteers, setMatchedVolunteers] = useState(volunteers)
+  const [matchedVolunteers, setMatchedVolunteers] = useState([])
   const [error, setError] = useState('')
   const [editingSummary, setEditingSummary] = useState(false)
   const [newTag, setNewTag] = useState('')
@@ -650,15 +632,15 @@ function SupportModal({ onClose, onComplete }) {
     setNewTag('')
   }
 
-  const loadMatches = async (tags) => {
-    const { volunteers: results } = await api.volunteers(tags)
+  const loadMatches = async (tags, priorities = []) => {
+    const { volunteers: results } = await api.volunteers(tags, priorities)
     const formatted = results.map((volunteer) => ({
       id: volunteer.id,
       name: volunteer.displayName,
       initials: volunteer.displayName.split(' ').map((part) => part[0]).join('').slice(0, 2),
       role: 'Peer supporter', match: volunteer.matchScore, color: volunteer.avatarColor,
       experience: (volunteer.expertise || []).join(' · '), bio: volunteer.bio,
-      status: volunteer.availability === 'available' ? 'Available today' : 'Limited availability',
+      status: (volunteer.matchReasons || [volunteer.availability === 'available' ? 'Available today' : 'Limited availability']).join(' · '),
     }))
     setMatchedVolunteers(formatted)
     setSelectedVolunteer((current) => formatted.some((volunteer) => volunteer.id === current) ? current : formatted[0]?.id || null)
@@ -676,7 +658,7 @@ function SupportModal({ onClose, onComplete }) {
       try {
         const { analysis: serverAnalysis } = await api.analyze(text)
         setAnalysis(serverAnalysis)
-        if (serverAnalysis.riskLevel !== 'urgent') await loadMatches(serverAnalysis.tags)
+        if (serverAnalysis.riskLevel !== 'urgent') await loadMatches(serverAnalysis.tags, serverAnalysis.priorities)
         setStep(2)
       } catch (requestError) { setError(requestError.message) }
       finally { setLoading(false) }
@@ -684,7 +666,7 @@ function SupportModal({ onClose, onComplete }) {
       setLoading(true)
       try {
         if (analysis.riskLevel === 'urgent') await createRequest(null)
-        else { await loadMatches(analysis.tags); setStep(3) }
+        else { await loadMatches(analysis.tags, analysis.priorities); setStep(3) }
       } catch (requestError) { setError(requestError.message) }
       finally { setLoading(false) }
     }
@@ -717,7 +699,7 @@ function SupportModal({ onClose, onComplete }) {
             <textarea value={text} maxLength={1200} onChange={(e) => setText(e.target.value)} placeholder="Lately I’ve been feeling..." autoFocus />
             <small>{text.length} / 1,200</small>
           </label>
-          <div className="prompt-chips"><span>Not sure where to begin?</span>{['Work has been overwhelming', 'I’ve been feeling alone', 'My thoughts won’t slow down'].map((prompt) => <button key={prompt} onClick={() => setText(prompt + '. ')}>{prompt}</button>)}</div>
+          <div className="prompt-chips"><span>Try a sample:</span>{matchingDemoPrompts.map((prompt) => <button key={prompt.label} onClick={() => setText(prompt.text)}>{prompt.label}</button>)}</div>
           <div className="safety-note"><LockKeyhole size={17} /><span><b>Your words are protected.</b> We use them only to coordinate your peer support.</span></div>
         </div>}
 
@@ -726,7 +708,7 @@ function SupportModal({ onClose, onComplete }) {
           <h2 id="support-modal-title">Did we understand you correctly?</h2>
           <p>This is a starting point, not a diagnosis. You can change any part before continuing.</p>
           <div className="analysis-card">
-            <div className="analysis-title"><span><Brain size={20} /></span><div><b>What we heard</b><small>{analysis.provider === 'openai' ? 'AI-assisted with OpenAI' : 'AI-assisted with the private local fallback'} · visible to your matched supporter</small></div><button onClick={() => setEditingSummary(!editingSummary)}>{editingSummary ? 'Done' : 'Edit'}</button></div>
+            <div className="analysis-title"><span><Brain size={20} /></span><div><b>What we heard</b><small>{analysis.provider === 'ollama' ? 'AI-assisted with self-hosted Qwen' : analysis.provider === 'openai' ? 'AI-assisted with OpenAI' : analysis.provider === 'gemini' ? 'AI-assisted with Gemini' : 'Basic local theme analysis'} · visible to your matched supporter</small></div><button onClick={() => setEditingSummary(!editingSummary)}>{editingSummary ? 'Done' : 'Edit'}</button></div>
             {editingSummary ? <textarea className="summary-editor" value={analysis.summary} onChange={(event) => setAnalysis((current) => ({ ...current, summary: event.target.value }))} /> : <p>{analysis.summary}</p>}
           </div>
           {analysis.crisisNotice && <div className="crisis-notice"><LifeBuoy size={19} /><span><b>Please seek immediate, real-time help</b>{analysis.crisisNotice}</span></div>}
@@ -737,8 +719,8 @@ function SupportModal({ onClose, onComplete }) {
         {step === 3 && <div className="modal-body choose-step">
           <span className="eyebrow"><HeartHandshake size={14} /> RECOMMENDED FOR YOU</span>
           <h2 id="support-modal-title">Choose someone who feels right</h2>
-          <p>Each person is trained, approved, and matched using your support themes and preferences.</p>
-          <div className="volunteer-options">{matchedVolunteers.map((volunteer) => (
+          <p>Volunteers are appointed by the care team and ranked using your reviewed support themes and their availability.</p>
+          <div className="volunteer-options">{!matchedVolunteers.length && <p role="status">No volunteers are available yet. Submit your request to the waiting queue for the care team to arrange support.</p>}{matchedVolunteers.map((volunteer) => (
             <button key={volunteer.id} className={selectedVolunteer === volunteer.id ? 'selected' : ''} onClick={() => setSelectedVolunteer(volunteer.id)}>
               <span className="avatar large" style={{ background: volunteer.color }}>{volunteer.initials}</span>
               <span className="volunteer-copy"><span><b>{volunteer.name}</b><em><Sparkles size={12} />{volunteer.match}% match</em></span><small>{volunteer.experience}</small><i>{volunteer.status}</i></span>
@@ -1083,7 +1065,7 @@ function ResourcesView({ showToast, user }) {
   const filtered = savedOnly ? resourceItems.filter((resource) => bookmarked.includes(resource.id)) : resourceItems
   return <div className="resources-layout"><section className="resource-hero"><div><span className="eyebrow light"><BookOpen size={14} /> YOUR PRACTICAL TOOLKIT</span><h2>Something helpful for this moment.</h2><p>Explore trusted, plain-language resources chosen for real life—not perfect days.</p><label><Search size={18} /><input id="resource-search" aria-label="Search resources" placeholder="Search anxiety, sleep, grounding…" value={query} onChange={(event) => setQuery(event.target.value)} /></label></div><div className="resource-hero-art"><span><Leaf size={42} /></span><i /><i /></div></section><div className="resource-filter-row"><div>{categories.map((item) => <button key={item} className={category === item ? 'active' : ''} onClick={() => setCategory(item)}>{item}</button>)}</div>{canBookmark && <button className={`saved-filter ${savedOnly ? 'active' : ''}`} onClick={() => setSavedOnly(!savedOnly)}><Bookmark size={16} fill={savedOnly ? 'currentColor' : 'none'} /> Saved ({bookmarked.length})</button>}</div>{error && <InlineError message={error} onRetry={load} />}
     {filtered.length ? <div className="resource-grid">{filtered.map((resource) => { const Icon = resourceIconMap[resource.icon] || BookOpen; const saved = bookmarked.includes(resource.id); return <article className={`resource-card ${resource.featured ? 'featured' : ''}`} key={resource.id}><div className={`resource-card-art ${resource.color}`}><Icon size={resource.featured ? 42 : 30} strokeWidth={1.5} />{resource.featured && <span>Recommended for you</span>}</div><div className="resource-card-body"><div className="resource-card-meta"><span>{resource.category}</span><i>·</i><span>{resource.type}</span></div><h3>{resource.title}</h3><p>{resource.description}</p><div><button className="text-button" onClick={() => setSelected(resource)}>Open resource <ArrowUpRight size={15} /></button>{canBookmark && <button className={`icon-button ${saved ? 'saved' : ''}`} aria-label={`${saved ? 'Remove' : 'Add'} bookmark for ${resource.title}`} onClick={() => toggleBookmark(resource.id)}><Bookmark size={17} fill={saved ? 'currentColor' : 'none'} /></button>}</div></div></article> })}</div> : !error && <div className="empty-state"><Search size={29} /><h3>{savedOnly ? 'No saved resources yet' : 'No resources found'}</h3><p>{savedOnly ? 'Bookmark a resource to keep it here.' : 'Try a broader word or another category.'}</p><button className="text-button" onClick={() => { setQuery(''); setCategory('All'); setSavedOnly(false) }}>Clear filters <RefreshCcw size={14} /></button></div>}
-    {selected && <SimpleModal title={selected.title} onClose={() => setSelected(null)} wide><div className="resource-reader-meta"><span>{selected.category}</span><span>{selected.type}</span></div><p className="resource-reader-intro">{selected.description}</p><div className="resource-content">{selected.content}</div><div className="safety-note"><Info size={17} /><span>Educational information only. It does not replace professional mental healthcare.</span></div>{canBookmark && <button className="button button-secondary" onClick={() => toggleBookmark(selected.id)}><Bookmark size={16} /> {bookmarked.includes(selected.id) ? 'Remove bookmark' : 'Save resource'}</button>}</SimpleModal>}
+    {selected && <SimpleModal title={selected.title} onClose={() => setSelected(null)} wide><div className="resource-reader-meta"><span>{selected.category}</span><span>{selected.type}</span></div><p className="resource-reader-intro">{selected.description}</p><div className="resource-content">{selected.content}</div>{selected.url && /^https:\/\//.test(selected.url) && <p><a className="button button-dark" href={selected.url} target="_blank" rel="noopener noreferrer">Open book / workbook <ExternalLink size={16} /></a><small className="resource-source">Published by {selected.source}</small></p>}<div className="safety-note"><Info size={17} /><span>Educational information only. It does not replace professional mental healthcare.</span></div>{canBookmark && <button className="button button-secondary" onClick={() => toggleBookmark(selected.id)}><Bookmark size={16} /> {bookmarked.includes(selected.id) ? 'Remove bookmark' : 'Save resource'}</button>}</SimpleModal>}
   </div>
 }
 
@@ -1207,10 +1189,31 @@ function InlineError({ message, onRetry, compact = false }) {
 
 function NotificationPopover({ onClose }) {
   const [items, setItems] = useState([])
-  useEffect(() => { api.notifications().then((result) => setItems(result.notifications)).catch(() => undefined) }, [])
-  const markRead = async () => { await api.markNotificationsRead(); setItems((notifications) => notifications.map((item) => ({ ...item, read: true }))); onClose() }
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const load = async () => {
+    setError('')
+    try { const result = await api.notifications(); setItems(result.notifications) }
+    catch (failure) { setError(failure.message) }
+    finally { setLoading(false) }
+  }
+  useEffect(() => {
+    load()
+    const socket = connectRealtime()
+    socket.on('notification', load)
+    const escape = (event) => { if (event.key === 'Escape') onClose() }
+    window.addEventListener('keydown', escape)
+    return () => { socket.disconnect(); window.removeEventListener('keydown', escape) }
+  }, [])
+  const markRead = async () => {
+    setSaving(true); setError('')
+    try { await api.markNotificationsRead(); setItems((notifications) => notifications.map((item) => ({ ...item, read: true }))); window.dispatchEvent(new CustomEvent('mentalbridge:notifications')) }
+    catch (failure) { setError(failure.message) }
+    finally { setSaving(false) }
+  }
   const icon = (type) => type === 'message' ? <MessageCircle size={17} /> : type === 'session' ? <CalendarDays size={17} /> : <BookOpen size={17} />
-  return <div className="popover notification-popover"><div className="popover-head"><h3>Notifications</h3><button onClick={markRead}>Mark all read</button></div>{items.slice(0, 5).map((item) => <div key={item.id} className={`notification-item ${item.read ? '' : 'unread'}`}><span className={`status-icon ${item.type === 'message' ? 'coral' : item.type === 'session' ? 'sage' : 'blue'}`}>{icon(item.type)}</span><div><b>{item.title}</b><p>{item.body}</p><small>{new Date(item.createdAt).toLocaleString()}</small></div></div>)}{items.length === 0 && <div className="popover-empty">You’re all caught up.</div>}</div>
+  return <section className="popover notification-popover" role="dialog" aria-label="Notifications"><div className="popover-head"><h3>Notifications</h3><button disabled={saving || !items.some((item) => !item.read)} onClick={markRead}>{saving ? 'Saving…' : 'Mark all read'}</button><button aria-label="Close notifications" onClick={onClose}><X size={17} /></button></div>{error && <InlineError message={error} onRetry={load} compact />}<div className="notification-list">{items.map((item) => <div key={item.id} className={`notification-item ${item.read ? '' : 'unread'}`}><span className={`status-icon ${item.type === 'message' ? 'coral' : item.type === 'session' ? 'sage' : 'blue'}`}>{icon(item.type)}</span><div><b>{item.title}</b><p>{item.body}</p><small>{new Date(item.createdAt).toLocaleString()}</small></div></div>)}{loading && <div className="popover-empty" role="status">Loading notifications…</div>}{!loading && !error && items.length === 0 && <div className="popover-empty">You’re all caught up.</div>}</div></section>
 }
 
 function ProfilePopover({ navigate, close, user, logout }) {

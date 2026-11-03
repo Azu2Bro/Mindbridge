@@ -13,7 +13,7 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`. The API runs on `http://localhost:3001` and Vite proxies API and Socket.IO traffic during development.
+Open `http://localhost:5173`. The member API runs on `http://localhost:3001`, the independent staff-authentication server runs on `http://localhost:3002`, and the local open-source AI runtime runs on `http://localhost:11434`.
 
 Demo accounts all use the password `Demo123!`:
 
@@ -24,17 +24,14 @@ Demo accounts all use the password `Demo123!`:
 | Moderator | `moderator@mentalbridge.demo` |
 | Administrator | `admin@mentalbridge.demo` |
 
-### Two separate sign-in entrances
+### Separate member and staff authentication processes
 
 | Who | Where | Endpoint |
 |---|---|---|
 | Members and peer volunteers | **Login** / **Sign up** in the landing navbar | `POST /api/auth/login` |
-| Moderators and administrators | **Staff portal** in the navbar, or `/staff` directly | `POST /api/auth/staff/login` |
+| Moderators and administrators | `/staff` directly | `POST http://localhost:3002/api/auth/staff/login` |
 
-The two portals are enforced on the server, not just in the interface. A staff account sent to
-`/api/auth/login` is refused and pointed at `/staff`; a member or volunteer account sent to
-`/api/auth/staff/login` is refused as well. The staff endpoint additionally carries a much tighter
-rate limit than the member endpoint and writes every accepted and refused attempt to the audit log.
+The two portals are enforced by separate Node processes, not just separate pages. The member API never accepts a staff login request; the staff-authentication service only admits moderator and administrator roles. It has its own tighter rate limit and writes every accepted and refused attempt to the shared audit log.
 `/admin` and `/moderator` both open the same staff portal.
 
 New registrations must verify their email before their first login. Demo accounts are already verified.
@@ -71,26 +68,33 @@ Copy `.env.example` to `.env` and replace `JWT_SECRET` before any real deploymen
 
 ```env
 PORT=3001
+STAFF_AUTH_PORT=3002
 JWT_SECRET=replace-with-at-least-32-random-characters
 DATA_FILE=.data/mentalbridge.json
 CLIENT_ORIGIN=http://localhost:5173
+VITE_STAFF_AUTH_URL=http://127.0.0.1:3002
+STAFF_AUTH_URL=http://127.0.0.1:3002
 MONGODB_URI=
 MONGODB_DATABASE=mentalbridge
-APP_URL=http://localhost:3001
+APP_URL=http://localhost:5173
 SMTP_HOST=
 SMTP_PORT=587
 SMTP_USER=
 SMTP_PASSWORD=
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-5.6-luna
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-3.5-flash
 ```
 
 `CLIENT_ORIGIN` only matters while the Vite dev server serves the frontend from a different port.
 After `npm start` the API serves the app itself, so there is a single origin and no CORS to configure.
 
-The application works without an OpenAI key using its deterministic local support-theme analyzer. When `OPENAI_API_KEY` is configured, the server uses the OpenAI Responses API with strict structured output and `store: false`. Urgent-language detection runs locally before any optional model request.
+The default AI provider is self-hosted Ollama with the Apache-2.0 Qwen2.5 1.5B model. `npm run dev` now starts the local AI runtime automatically. Install [Ollama](https://ollama.com/download) and pull the model with `ollama pull qwen2.5:1.5b` when the portable runtime or model is not already present (portable Windows command: `.\.data\ollama\ollama.exe pull qwen2.5:1.5b`). Set `AI_PROVIDER=ollama`, `OLLAMA_URL=http://127.0.0.1:11434`, and `OLLAMA_MODEL=qwen2.5:1.5b`. `npm run ai:serve` remains available for running only the AI service; it uses `.data/ollama/ollama.exe` when present and keeps models in `.data/ollama-models`. Keep Ollama running on the API machine (or configure a trusted private inference server). Inference has no provider request quota, but needs enough RAM/CPU and remains subject to the app's abuse-protection rate limit. A remote deployment needs its own reachable Ollama service; installing it on your laptop does not enable it on Render.
 
-The local JSON database works immediately. To use MongoDB Community Server and Compass locally, set `MONGODB_URI=mongodb://127.0.0.1:27017`. You can later replace it with an Atlas connection string without changing the API or client.
+The model summarizes requests and extracts themes; the local matcher ranks verified, available volunteers using those themes. Urgent-language screening stays local. A failed or timed-out model request uses a clearly labeled basic local analysis and never silently sends the request to a paid provider. `AI_PROVIDER=local` disables model calls; explicitly selecting `gemini` or `openai` enables those optional integrations. Health reports the selected provider, not model readiness. API details: [Ollama chat](https://docs.ollama.com/api/chat).
+
+The local JSON database works immediately for one process. Because independent services must share account records, configure MongoDB Community Server or Atlas (`MONGODB_URI=mongodb://127.0.0.1:27017`) whenever the staff server is running separately.
 
 In development, one-time verification and password-reset tokens can be completed from the on-screen development controls when SMTP is not configured. Configure the SMTP variables to send real verification and reset links. Gmail users should use an App Password rather than their normal account password.
 
@@ -114,7 +118,7 @@ In development, one-time verification and password-reset tokens can be completed
 - Natural-language support requests
 - Reviewable AI/local summaries, themes, and priorities
 - Local urgent-language screening and moderator-review routing
-- Volunteer ranking by expertise and availability
+- Explainable volunteer ranking by AI-extracted themes, priorities, expertise, lived experience, availability, and active capacity
 - User-selected matches
 - Request statuses, scheduled check-ins, private notes, and feedback
 - Support history and real-time update notifications
@@ -140,9 +144,11 @@ In development, one-time verification and password-reset tokens can be completed
 ## Commands
 
 ```bash
-npm run dev       # API and React app together, with hot reload
+npm run dev       # Member API, staff-auth process, and React app together
+npm run dev:ai    # Start the local open-source AI runtime used during development
 npm start         # Build, then serve the web app and API from one address
 npm run server    # Serve without rebuilding first
+npm run staff:server # Run only the independent staff authentication server
 npm run build     # Production React build
 npm run icons     # Regenerate the PWA icons from public/icon.svg
 npm test          # Full API integration and safety tests
@@ -151,19 +157,16 @@ npm run test:ui   # Chrome end-to-end UI and readability smoke test
 
 ## Production
 
-The Express server serves the compiled React application from `dist/` whenever a build exists, so the
-project deploys as a single service. `npm start` does the build and the serve in one step.
+The member Express server serves the compiled React application from `dist/` whenever a build exists. The staff-authentication server is a separate process, configured through `npm run staff:server`.
 
-A multi-stage `Dockerfile` and a `render.yaml` blueprint are included, deploying one service that
-serves both the API and the built React app.
+A multi-stage `Dockerfile` and `render.yaml` blueprint deploy two Render web services: `mentalbridge` for the member app/API and `mentalbridge-staff-auth` for staff authentication.
 
 Two variables are mandatory when `NODE_ENV=production`, or the server throws on startup:
 
-- `JWT_SECRET` — generated automatically by the Render blueprint
+- `JWT_SECRET` — set the identical secret value on both Render services
 - `SMTP_HOST` — email verification is mandatory for new signups, so a real sender is required
 
-`MONGODB_URI` should point at MongoDB Atlas. Without it the server falls back to a JSON file, and on
-a host with no persistent disk that file is wiped on every deploy. When Atlas is used, allow
+`MONGODB_URI` should point at the same MongoDB Atlas database on both services. Without it the member service falls back to a JSON file, and on a host with no persistent disk that file is wiped on every deploy; the staff service intentionally refuses to start in production without MongoDB. When Atlas is used, allow
 `0.0.0.0/0` in its Network Access list, because free hosts do not provide a static outbound IP.
 
 `APP_URL` is the public address used inside verification and reset emails. Render supplies it as a
@@ -184,6 +187,7 @@ src/
   styles.css          Responsive visual system
 server/
   index.js            Express routes and Socket.IO server
+  staff-auth-server.js Separate moderator/administrator authentication process
   ai.js               Local/OpenAI analysis and matching
   auth.js             JWT and role middleware
   email.js            SMTP verification and password-reset delivery
@@ -199,3 +203,13 @@ scripts/
   ui-smoke.mjs        Headless Chrome end-to-end UI verification
   generate-icons.mjs  Renders the PWA PNG icons from icon.svg
 ```
+
+## Account links and real volunteer setup
+
+Set `APP_URL` to the reachable frontend address, for example `https://your-site.example` in deployment or `http://localhost:5173` for Vite. Production rejects localhost and requires HTTPS; Render's `RENDER_EXTERNAL_URL` is an automatic fallback. In development, an explicitly allowed `CLIENT_ORIGIN` is used in preference to a localhost API address. For phones, configure the reachable LAN frontend address in `APP_URL` and `CLIENT_ORIGIN`; localhost on a phone refers to the phone. Old emails retain their old URLs: request new links after changing configuration.
+
+The operator can provision accounts with `INITIAL_ADMIN_EMAIL` and comma-separated `INITIAL_VOLUNTEER_EMAILS`. Provisioning runs once per email/role at member API startup, preserves existing passwords and verification, and records an audit entry. New accounts have an unknown random password and remain unverified. Their owners use **Forgot your password?** (staff can use **Set up account or reset password** at `/staff`) to receive a one-time setup link. Completing this mailbox-ownership check sets the password and activates a newly provisioned account. No invitations are sent automatically.
+
+Volunteers set their real display name, expertise, bio, and availability in Settings before appearing in matching. Demo volunteers and four varied sample prompts are enabled by default during local development; set `ALLOW_DEMO_MATCHES=false` to test the empty waiting queue. Production always excludes demo addresses. No available volunteer means the request enters the pending queue. Moderators can appoint additional verified accounts in People & roles.
+
+The library includes free publisher-hosted guides from [WHO](https://www.who.int/publications/i/item/9789240003927) and [CCI](https://www.cci.health.wa.gov.au/Resources/Looking-After-Yourself); links open the original workbook/download pages. Existing databases receive these entries once without replacing custom resources.

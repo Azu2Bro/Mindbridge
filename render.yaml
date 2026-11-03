@@ -1,7 +1,7 @@
 # Render blueprint for MentalBridge.
 #
-# One service: the Express API also serves the built React app from dist/,
-# so a single https address works on a laptop and on a phone.
+# Two services: the member API serves the web app, while staff credentials are
+# checked by a separate Node process and public service.
 #
 # Storage is MongoDB Atlas rather than a persistent disk. The free plan gives
 # each deploy a fresh container filesystem, so a JSON file on disk would be
@@ -19,10 +19,10 @@ services:
       - key: NODE_ENV
         value: production
 
-      # Generated once by Render and kept across deploys. Rotating it signs
-      # every existing session out, which is fine.
+      # Set this to the same value on BOTH services. Staff-issued JWTs must be
+      # verifiable by the member API.
       - key: JWT_SECRET
-        generateValue: true
+        sync: false
 
       # MongoDB Atlas connection string. Required, or the app falls back to a
       # JSON file that resets on every deploy.
@@ -30,6 +30,18 @@ services:
         sync: false
       - key: MONGODB_DATABASE
         value: mentalbridge
+
+      # The compiled browser app connects directly to the staff auth service.
+      - key: STAFF_AUTH_URL
+        fromService:
+          type: web
+          name: mentalbridge-staff-auth
+          property: host
+      - key: VITE_STAFF_AUTH_URL
+        fromService:
+          type: web
+          name: mentalbridge-staff-auth
+          property: host
 
       # REQUIRED. The server throws on startup in production without SMTP_HOST,
       # because email verification is mandatory for new signups.
@@ -55,8 +67,52 @@ services:
           name: mentalbridge
           property: host
 
-      # Optional. Without a key the deterministic local analyzer is used.
+      - key: AI_PROVIDER
+        value: ollama
+      - key: OLLAMA_URL
+        sync: false
+      - key: OLLAMA_MODEL
+        value: qwen2.5:1.5b
+      - key: INITIAL_ADMIN_EMAIL
+        sync: false
+      - key: INITIAL_VOLUNTEER_EMAILS
+        sync: false
+
+      # Optional providers require explicit AI_PROVIDER selection.
       - key: OPENAI_API_KEY
         sync: false
       - key: OPENAI_MODEL
         value: gpt-5.6-luna
+      # Preferred provider for real AI-assisted support summaries. Gemini is
+      # used before OpenAI when both keys are configured.
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash
+
+  - type: web
+    name: mentalbridge-staff-auth
+    runtime: docker
+    plan: free
+    dockerCommand: npm run staff:server
+    healthCheckPath: /api/staff/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # Must exactly match the JWT_SECRET configured for mentalbridge.
+      - key: JWT_SECRET
+        sync: false
+
+      # Both services authenticate against the same persistent user records.
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DATABASE
+        value: mentalbridge
+
+      # Permit browser requests only from the member app service.
+      - key: CLIENT_ORIGIN
+        fromService:
+          type: web
+          name: mentalbridge
+          property: host

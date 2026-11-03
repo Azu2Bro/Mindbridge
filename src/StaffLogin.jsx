@@ -73,6 +73,7 @@ export default function StaffLogin({ theme }) {
           {loading ? <><LoaderCircle className="spin" size={17} /> Verifying…</> : <>Enter the console <ArrowRight size={17} /></>}
         </button>
 
+        <a className="forgot-link" href="/?mode=forgot">Set up account or reset password</a>
         <div className="staff-demo">
           <small>Demo accounts for review</small>
           {demoAccounts.map(({ role, email, icon: Icon }) => (

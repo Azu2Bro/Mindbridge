@@ -13,21 +13,27 @@ function createTransporter() {
 // Hosts such as Render supply the public address as a bare hostname with no
 // scheme. Pasting that straight into an email produces a link that no client
 // will resolve, so normalise it here and drop any trailing slash.
-function appBaseUrl() {
-  const configured = (process.env.APP_URL || '').trim()
-  if (!configured) return 'http://localhost:3001'
+export function appBaseUrl(requestOrigin) {
+  const configured = (process.env.APP_URL || process.env.RENDER_EXTERNAL_URL || '').trim()
+  const allowedOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:5173,http://127.0.0.1:5173').split(',').map((item) => item.trim())
+  // Only use browser origins explicitly trusted by the deployment, never Host headers.
+  if (process.env.NODE_ENV !== 'production' && requestOrigin && allowedOrigins.includes(requestOrigin) && (!configured || /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:|\/|$)/i.test(configured))) return new URL(requestOrigin).origin
+  if (!configured) throw new Error('Set APP_URL to the reachable website address before sending account emails')
   const withScheme = /^https?:\/\//i.test(configured)
     ? configured
     : `${configured.startsWith('localhost') || configured.startsWith('127.0.0.1') ? 'http' : 'https'}://${configured}`
-  return withScheme.replace(/\/+$/, '')
+  const url = new URL(withScheme)
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error('APP_URL must be an HTTP(S) website address')
+  if (process.env.NODE_ENV === 'production' && (url.protocol !== 'https:' || /^(localhost|127\..*|\[::1\]|0\.0\.0\.0)$/.test(url.hostname))) throw new Error('Production APP_URL must be a public HTTPS address, not localhost')
+  return url.origin
 }
 
 const escapeHtml = (value) => value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character])
 
-export async function sendPasswordResetEmail({ to, displayName, token }) {
+export async function sendPasswordResetEmail({ to, displayName, token, requestOrigin }) {
   const transporter = createTransporter()
   if (!transporter) return false
-  const resetUrl = `${appBaseUrl()}/?reset=${encodeURIComponent(token)}`
+  const resetUrl = `${appBaseUrl(requestOrigin)}/?reset=${encodeURIComponent(token)}`
   const safeName = escapeHtml(displayName)
   await transporter.sendMail({
     from: process.env.SMTP_FROM || 'MentalBridge <no-reply@mentalbridge.local>',
@@ -39,10 +45,10 @@ export async function sendPasswordResetEmail({ to, displayName, token }) {
   return true
 }
 
-export async function sendVerificationEmail({ to, displayName, token }) {
+export async function sendVerificationEmail({ to, displayName, token, requestOrigin }) {
   const transporter = createTransporter()
   if (!transporter) return false
-  const verificationUrl = `${appBaseUrl()}/?verify=${encodeURIComponent(token)}`
+  const verificationUrl = `${appBaseUrl(requestOrigin)}/?verify=${encodeURIComponent(token)}`
   const safeName = escapeHtml(displayName)
   await transporter.sendMail({
     from: process.env.SMTP_FROM || 'MentalBridge <no-reply@mentalbridge.local>',

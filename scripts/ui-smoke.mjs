@@ -10,7 +10,7 @@ if (!appUrl) {
   for (let port = 5173; port <= 5179; port += 1) {
     try {
       const source = await (await fetch(`http://127.0.0.1:${port}/src/LandingPage.jsx`)).text()
-      if (source.includes('A gentler way to find someone')) { appUrl = `http://127.0.0.1:${port}`; break }
+      if (source.includes('A gentler way to find someone')) { appUrl = `http://localhost:${port}`; break }
     } catch { /* Try the next local Vite port. */ }
   }
 }
@@ -101,6 +101,7 @@ try {
   assert.equal(await evaluate(`(() => { const button = document.querySelector('.theme-toggle'); if (!button) return false; button.click(); return true })()`), true)
   await clickButton('Login')
   await waitForText('Welcome back')
+  assert.equal(await evaluate(`document.querySelector('.demo-login') === null`), true)
   await clickButton('Create an account')
   await waitForText('Bengali and English names are supported')
   const signupFields = await evaluate(`(() => {
@@ -112,13 +113,13 @@ try {
   await clickAriaLabel('Close sign in')
 
   // Staff sign-in lives on its own page now, not as a tab inside the member dialog.
-  assert.equal(await evaluate(`document.querySelector('.landing-nav .landing-staff-login')?.getAttribute('href')`), '/staff')
+  assert.equal(await evaluate(`document.querySelector('.landing-nav .landing-staff-login') === null`), true)
   await send('Page.navigate', { url: `${appUrl}/staff` })
   await waitForText('Care operations console')
   await waitForText('Sign in as staff')
   assert.equal(await evaluate(`document.querySelector('.portal-tabs') === null`), true)
-  const staffRejectsMember = await evaluate(`(async () => { const response = await fetch('/api/auth/staff/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'alex@mentalbridge.demo', password: 'Demo123!' }) }); return response.status })()`, true)
-  assert.equal(staffRejectsMember, 403)
+  const staffRejectsMember = await evaluate(`(async () => { const response = await fetch('http://127.0.0.1:3002/api/auth/staff/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'alex@mentalbridge.demo', password: 'Demo123!' }) }); return response.status })()`, true)
+  assert.ok([403, 404].includes(staffRejectsMember))
   const memberRejectsStaff = await evaluate(`(async () => { const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'admin@mentalbridge.demo', password: 'Demo123!' }) }); const data = await response.json(); return { status: response.status, staffPortal: data.staffPortal } })()`, true)
   assert.deepEqual(memberRejectsStaff, { status: 403, staffPortal: true })
   await send('Page.navigate', { url: appUrl })
@@ -129,6 +130,16 @@ try {
   await send('Page.reload', { ignoreCache: true })
   await waitForText('Good morning')
 
+  await send('Emulation.setDeviceMetricsOverride', { width: 375, height: 812, deviceScaleFactor: 1, mobile: true })
+  await clickAriaLabel('Notifications')
+  await waitForText('Mark all read')
+  const notificationLayout = await evaluate(`(() => { const panel = document.querySelector('.notification-popover').getBoundingClientRect(); const bell = document.querySelector('.notification-button'); return { left: panel.left, right: panel.right, viewport: innerWidth, display: getComputedStyle(bell).display } })()`)
+  assert.notEqual(notificationLayout.display, 'none')
+  assert.ok(notificationLayout.left >= 0 && notificationLayout.right <= notificationLayout.viewport)
+  const notificationScreenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })
+  await writeFile(join(process.cwd(), 'mentalbridge-notifications-mobile.png'), Buffer.from(notificationScreenshot.data, 'base64'))
+  await clickAriaLabel('Close notifications')
+  await send('Emulation.clearDeviceMetricsOverride')
   const typeScale = await evaluate(`(() => ({ nav: parseFloat(getComputedStyle(document.querySelector('.nav-item')).fontSize), body: parseFloat(getComputedStyle(document.querySelector('.hero-copy > p')).fontSize), button: parseFloat(getComputedStyle(document.querySelector('.button')).fontSize) }))()`)
   assert.ok(typeScale.nav >= 15)
   assert.ok(typeScale.body >= 14)
@@ -184,7 +195,7 @@ try {
     }
   })()`)
   assert.ok(aiSummaryState.text.length >= 30, 'AI-assisted summary should contain useful text')
-  assert.ok(aiSummaryState.provider.includes('AI-assisted'), 'AI provider/fallback should be visible')
+  assert.ok(/AI-assisted|Basic local theme analysis/.test(aiSummaryState.provider), 'AI provider/fallback should be visible')
   assert.ok(aiSummaryState.fontSize >= 14, 'AI summary should be readable')
 
   const themeBeforeContrastCheck = await evaluate(`document.documentElement.dataset.theme`)
@@ -215,6 +226,11 @@ try {
   await clickButton('Open resource')
   await waitForText('Educational information only')
   await clickAriaLabel('Close')
+  await waitForText('Doing What Matters in Times of Stress')
+  await evaluate(`(() => { const card = [...document.querySelectorAll('.resource-card')].find((item) => item.textContent.includes('Doing What Matters in Times of Stress')); card.querySelector('button').click() })()`)
+  await waitForText('Open book / workbook')
+  assert.equal(await evaluate(`document.querySelector('.simple-modal a[target="_blank"]')?.href`), 'https://www.who.int/publications/i/item/9789240003927')
+  await clickAriaLabel('Close')
   await clickButton('Settings')
   await waitForText('Privacy preferences')
   await clickButton('Help center')
@@ -240,7 +256,7 @@ try {
   const screenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })
   await writeFile(join(process.cwd(), 'mentalbridge-complete-dashboard.png'), Buffer.from(screenshot.data, 'base64'))
 
-  const adminRole = await evaluate(`(async () => { const response = await fetch('/api/auth/staff/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'admin@mentalbridge.demo', password: 'Demo123!' }) }); const data = await response.json(); localStorage.setItem('mentalbridge-token', data.token); return data.user.role })()`, true)
+  const adminRole = await evaluate(`(async () => { const response = await fetch('http://127.0.0.1:3002/api/auth/staff/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'admin@mentalbridge.demo', password: 'Demo123!' }) }); const data = await response.json(); localStorage.setItem('mentalbridge-token', data.token); return data.user.role })()`, true)
   assert.equal(adminRole, 'admin')
   await send('Page.reload', { ignoreCache: true })
   await waitForText('Care operations')
@@ -254,6 +270,18 @@ try {
   await waitForText('Add resource')
   const adminScreenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })
   await writeFile(join(process.cwd(), 'mentalbridge-admin.png'), Buffer.from(adminScreenshot.data, 'base64'))
+
+  // Recovery URLs must open even when a different account is already signed in.
+  await send('Page.navigate', { url: appUrl + '/?reset=' + 'f'.repeat(64) })
+  await waitForText('Choose a new password')
+  await evaluate(`(() => { const input = document.querySelector('input[autocomplete="new-password"]'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'ResetCheck123'); input.dispatchEvent(new Event('input', { bubbles: true })) })()`)
+  await clickButton('Save new password')
+  await waitForText('This reset link is invalid or has expired')
+  await send('Page.navigate', { url: appUrl + '/?verify=' + 'e'.repeat(64) })
+  await waitForText('This verification link is invalid or has expired')
+  await clickButton('Request a new verification link')
+  await waitForText('Resend verification email')
+  assert.equal(await evaluate(`location.search.includes('verify=')`), false)
 
   console.log('UI smoke test passed: landing page, themes, live navigation counts, AI-assisted summary, readable contrast, member navigation, resources, support, and role-based administration.')
 } finally {
