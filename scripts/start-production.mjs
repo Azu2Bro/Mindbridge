@@ -28,7 +28,6 @@ start('/opt/llama/llama-server', [
   '--ctx-size', '2048',
   '--parallel', '1',
   '--threads', process.env.LLAMACPP_THREADS || '2',
-  '--no-webui',
 ])
 
 async function waitForAi() {
