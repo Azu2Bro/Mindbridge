@@ -58,11 +58,12 @@ test('self-hosted summaries drive matching; malformed AI output falls back local
   const result = await analyzeSupportText('Work deadlines are overwhelming this week.')
   assert.equal(result.provider, 'ollama')
   const volunteers = [
-    { id: 'real', email: 'peer@example.com', role: 'volunteer', emailVerified: true, status: 'active', availability: 'available', expertise: ['Work stress'] },
-    { id: 'other', email: 'other@example.com', role: 'volunteer', emailVerified: true, status: 'active', availability: 'available', expertise: ['Grief'] },
+    { id: 'real', email: 'peer@example.com', displayName: 'Real Peer', role: 'volunteer', emailVerified: true, status: 'active', availability: 'available', expertise: ['Work stress'] },
+    { id: 'other', email: 'other@example.com', displayName: 'Other Peer', role: 'volunteer', emailVerified: true, status: 'active', availability: 'available', expertise: ['Grief'] },
   ]
   assert.equal(rankVolunteers(result.tags, volunteers)[0].id, 'real')
   assert.equal(rankVolunteers(result.tags, [...volunteers, { ...volunteers[0], id: 'demo', email: 'maya@mentalbridge.demo' }, { ...volunteers[0], id: 'unverified', emailVerified: false }, { ...volunteers[0], id: 'offline', availability: 'unavailable' }]).length, 2)
+  assert.equal(rankVolunteers(result.tags, [...volunteers, { ...volunteers[0], id: 'demo', email: 'maya@mentalbridge.demo' }], { includeDemo: true }).some((item) => item.id === 'demo'), true)
   await analyzeSupportText('I want to kill myself')
   assert.equal(calls, 1, 'Urgent text never reaches the model')
   fetchMock.mock.mockImplementation(async () => ({ ok: true, json: async () => ({ message: { content: '{}' } }) }))

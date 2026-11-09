@@ -86,7 +86,7 @@ function formatPost(post, userId, postBookmarks = []) {
 }
 
 async function normalizeDataStore(dataStore) {
-  const demoMode = process.env.NODE_ENV !== 'production'
+  const demoMode = includeDemoMatches()
   const existingDemoHash = dataStore.data?.users?.find((user) => user.email?.endsWith('@mentalbridge.demo'))?.passwordHash
   const demoVolunteers = demoMode ? createDemoMatchingVolunteers(existingDemoHash || await bcrypt.hash('Demo123!', 12)) : []
   await dataStore.mutate((data) => {
@@ -107,13 +107,13 @@ async function normalizeDataStore(dataStore) {
       data.meta.publisherResourcesAdded = true
     }
     data.users ||= []
-    if (demoMode && data.meta.demoMatchingVersion !== 2) {
+    if (demoMode && data.meta.demoMatchingVersion !== 3) {
       for (const template of demoVolunteers) {
         const existing = data.users.find((user) => user.id === template.id || user.email === template.email)
         if (!existing) data.users.push(template)
-        else for (const field of ['expertise', 'livedExperience', 'communicationStyle', 'languages', 'maxActiveCases', 'rating', 'yearsActive', 'bio', 'avatarColor']) existing[field] ??= template[field]
+        else for (const field of ['isDemo', 'expertise', 'livedExperience', 'communicationStyle', 'languages', 'maxActiveCases', 'rating', 'yearsActive', 'bio', 'avatarColor']) existing[field] ??= template[field]
       }
-      data.meta.demoMatchingVersion = 2
+      data.meta.demoMatchingVersion = 3
     }
     data.users.forEach((user) => {
       user.bookmarks ||= []
@@ -134,7 +134,8 @@ async function normalizeDataStore(dataStore) {
 }
 
 function includeDemoMatches() {
-  return process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEMO_MATCHES !== 'false'
+  if (process.env.ALLOW_DEMO_MATCHES !== undefined) return process.env.ALLOW_DEMO_MATCHES === 'true'
+  return process.env.NODE_ENV !== 'production'
 }
 
 function activeVolunteerAssignments(requests = []) {

@@ -5,7 +5,7 @@ const now = () => new Date().toISOString()
 export function createDemoMatchingVolunteers(passwordHash, createdAt = now()) {
   return [
     {
-      id: 'volunteer-maya', email: 'maya@mentalbridge.demo', passwordHash,
+      id: 'volunteer-maya', email: 'maya@mentalbridge.demo', passwordHash, isDemo: true,
       displayName: 'Maya R.', anonymousName: 'Maya R.', role: 'volunteer', status: 'active', emailVerified: true,
       expertise: ['Anxious thoughts', 'Work stress', 'Burnout'], livedExperience: ['Work stress', 'Anxious thoughts'],
       communicationStyle: 'Warm and reflective', languages: ['English', 'Bangla'],
@@ -14,7 +14,7 @@ export function createDemoMatchingVolunteers(passwordHash, createdAt = now()) {
       createdAt,
     },
     {
-      id: 'volunteer-sam', email: 'sam@mentalbridge.demo', passwordHash,
+      id: 'volunteer-sam', email: 'sam@mentalbridge.demo', passwordHash, isDemo: true,
       displayName: 'Sam K.', anonymousName: 'Sam K.', role: 'volunteer', status: 'active', emailVerified: true,
       expertise: ['Loneliness', 'Life transitions', 'Self-esteem'], livedExperience: ['Loneliness', 'Self-esteem'],
       communicationStyle: 'Patient and conversational', languages: ['English', 'Hindi'],
@@ -23,7 +23,7 @@ export function createDemoMatchingVolunteers(passwordHash, createdAt = now()) {
       createdAt,
     },
     {
-      id: 'volunteer-nora', email: 'nora@mentalbridge.demo', passwordHash,
+      id: 'volunteer-nora', email: 'nora@mentalbridge.demo', passwordHash, isDemo: true,
       displayName: 'Nora A.', anonymousName: 'Nora A.', role: 'volunteer', status: 'active', emailVerified: true,
       expertise: ['Low mood', 'Grief', 'Family pressure'], livedExperience: ['Grief', 'Family pressure'],
       communicationStyle: 'Calm and gentle', languages: ['English', 'Arabic'],
@@ -32,7 +32,7 @@ export function createDemoMatchingVolunteers(passwordHash, createdAt = now()) {
       createdAt,
     },
     {
-      id: 'volunteer-farah', email: 'farah@mentalbridge.demo', passwordHash,
+      id: 'volunteer-farah', email: 'farah@mentalbridge.demo', passwordHash, isDemo: true,
       displayName: 'Farah H.', anonymousName: 'Farah H.', role: 'volunteer', status: 'active', emailVerified: true,
       expertise: ['Family pressure', 'Self-esteem', 'Anxious thoughts'], livedExperience: ['Family pressure', 'Self-esteem'],
       communicationStyle: 'Encouraging and culturally aware', languages: ['Bangla', 'English'],
@@ -41,7 +41,7 @@ export function createDemoMatchingVolunteers(passwordHash, createdAt = now()) {
       createdAt,
     },
     {
-      id: 'volunteer-rafi', email: 'rafi@mentalbridge.demo', passwordHash,
+      id: 'volunteer-rafi', email: 'rafi@mentalbridge.demo', passwordHash, isDemo: true,
       displayName: 'Rafi T.', anonymousName: 'Rafi T.', role: 'volunteer', status: 'active', emailVerified: true,
       expertise: ['Sleep & energy', 'Work stress', 'Low mood'], livedExperience: ['Burnout', 'Sleep & energy'],
       communicationStyle: 'Practical and structured', languages: ['Bangla', 'English'],
@@ -50,7 +50,7 @@ export function createDemoMatchingVolunteers(passwordHash, createdAt = now()) {
       createdAt,
     },
     {
-      id: 'volunteer-elena', email: 'elena@mentalbridge.demo', passwordHash,
+      id: 'volunteer-elena', email: 'elena@mentalbridge.demo', passwordHash, isDemo: true,
       displayName: 'Elena P.', anonymousName: 'Elena P.', role: 'volunteer', status: 'active', emailVerified: true,
       expertise: ['Grief', 'Loneliness', 'Low mood'], livedExperience: ['Grief', 'Relocation'],
       communicationStyle: 'Quiet and compassionate', languages: ['English', 'Spanish'],

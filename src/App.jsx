@@ -640,6 +640,7 @@ function SupportModal({ onClose, onComplete }) {
     const formatted = results.map((volunteer) => ({
       id: volunteer.id,
       name: volunteer.displayName,
+      isDemo: Boolean(volunteer.isDemo),
       initials: volunteer.displayName.split(' ').map((part) => part[0]).join('').slice(0, 2),
       role: 'Peer supporter', match: volunteer.matchScore, color: volunteer.avatarColor,
       experience: (volunteer.expertise || []).join(' · '), bio: volunteer.bio,
@@ -726,7 +727,7 @@ function SupportModal({ onClose, onComplete }) {
           <div className="volunteer-options">{!matchedVolunteers.length && <p role="status">No volunteers are available yet. Submit your request to the waiting queue for the care team to arrange support.</p>}{matchedVolunteers.map((volunteer) => (
             <button key={volunteer.id} className={selectedVolunteer === volunteer.id ? 'selected' : ''} onClick={() => setSelectedVolunteer(volunteer.id)}>
               <span className="avatar large" style={{ background: volunteer.color }}>{volunteer.initials}</span>
-              <span className="volunteer-copy"><span><b>{volunteer.name}</b><em><Sparkles size={12} />{volunteer.match}% match</em></span><small>{volunteer.experience}</small><i>{volunteer.status}</i></span>
+              <span className="volunteer-copy"><span><b>{volunteer.name}</b><em><Sparkles size={12} />{volunteer.match}% match</em></span><small>{volunteer.isDemo ? 'Sample profile · ' : ''}{volunteer.experience}</small><i>{volunteer.status}</i></span>
               <span className="radio-check">{selectedVolunteer === volunteer.id && <Check size={14} />}</span>
             </button>
           ))}</div>
