@@ -85,7 +85,7 @@ export const api = {
   reactToPost: (postId) => request(`/posts/${postId}/reactions`, json('POST', {})),
   commentOnPost: (postId, text) => request(`/posts/${postId}/comments`, json('POST', { text })),
   bookmarkPost: (postId) => request(`/posts/${postId}/bookmark`, json('POST', {})),
-  reportPost: (postId, reason) => request(`/posts/${postId}/report`, json('POST', { reason })),
+  reportPost: (postId, category, details) => request(`/posts/${postId}/report`, json('POST', { category, details })),
   resources: (query = '', category = '') => request(`/resources?q=${encodeURIComponent(query)}&category=${encodeURIComponent(category)}`),
   toggleBookmark: (resourceId) => request(`/resources/${resourceId}/bookmark`, json('POST', {})),
   conversations: () => request('/conversations'),

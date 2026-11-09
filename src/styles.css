@@ -638,6 +638,36 @@ body { font-size: 16px; line-height: 1.55; }
 .notification-item { border-color: var(--line); align-items: flex-start; }
 .notification-item.unread { background: var(--green-soft); }
 .notification-item p { white-space: normal; overflow-wrap: anywhere; color: var(--ink-2); line-height: 1.5; }
+
+/* Authenticated app readability baseline. */
+.app-shell { color: var(--ink); }
+.app-shell .page-content { font-size: 16px; }
+.app-shell .page-content p,
+.app-shell .page-content li,
+.app-shell .page-content label,
+.app-shell .page-content input,
+.app-shell .page-content textarea,
+.app-shell .page-content select { color: var(--ink-2); font-size: 15px; opacity: 1; }
+.app-shell .page-content small,
+.app-shell .page-content .muted,
+.app-shell .page-content .empty-copy { color: var(--muted); font-size: 13.5px; opacity: 1; }
+.app-shell .page-content h1,
+.app-shell .page-content h2,
+.app-shell .page-content h3,
+.app-shell .page-content b { color: var(--ink); opacity: 1; }
+.app-shell .page-content button,
+.app-shell .page-content .text-button { opacity: 1; }
+.app-shell .hero-card,
+.app-shell .support-intro-card { color: #fff; }
+.app-shell .hero-card p,
+.app-shell .support-intro-card p,
+.app-shell .hero-card h2,
+.app-shell .support-intro-card h2,
+.app-shell .hero-card b,
+.app-shell .support-intro-card b { color: #fff; }
+.app-shell .hero-card p,
+.app-shell .support-intro-card p { color: #d7ebe1; }
+.app-shell .privacy-panel p { color: #c8ddd4; }
 .notification-item b { overflow-wrap: anywhere; }
 .notification-item small { color: var(--muted); }
 .notification-item .status-icon { flex-shrink: 0; }

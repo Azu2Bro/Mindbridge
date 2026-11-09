@@ -642,12 +642,15 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     res.json({ postBookmarks })
   }))
   app.post('/api/posts/:postId/report', allowRoles('user', 'volunteer'), asyncRoute(async (req, res) => {
-    const reason = parse(z.string().trim().min(3).max(500), req.body?.reason || 'Potentially harmful content')
+    const body = parse(z.object({
+      category: z.enum(['harassment', 'bullying', 'hate_speech', 'threats', 'self_harm', 'spam', 'other']),
+      details: z.string().trim().max(500).optional().default(''),
+    }), req.body)
     const target = dataStore.data.posts.find((post) => post.id === req.params.postId && !post.removed)
     if (!target) return res.status(404).json({ error: 'Post not found' })
     const existing = dataStore.data.reports.find((report) => report.reporterId === req.user.id && report.targetId === req.params.postId && ['open', 'reviewing'].includes(report.status))
     if (existing) return res.status(409).json({ error: 'You have already reported this post' })
-    const report = { id: id('report'), reporterId: req.user.id, targetType: 'post', targetId: req.params.postId, reason, status: 'open', createdAt: now() }
+    const report = { id: id('report'), reporterId: req.user.id, targetType: 'post', targetId: req.params.postId, category: body.category, reason: body.details || body.category, status: 'open', createdAt: now() }
     await dataStore.mutate((data) => { data.reports.push(report); return report })
     res.status(201).json({ report })
   }))
