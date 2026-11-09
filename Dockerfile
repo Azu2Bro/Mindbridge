@@ -27,12 +27,15 @@ COPY --from=build /app/dist ./dist
 COPY server ./server
 COPY scripts/start-production.mjs ./scripts/start-production.mjs
 COPY --from=llama /app /opt/llama
+COPY --from=llama /lib/x86_64-linux-gnu /opt/llama/lib
+COPY --from=llama /usr/lib/x86_64-linux-gnu /opt/llama/usr-lib
 
 # Keep a compact open-source model inside the Render image. The model server is
 # bound to loopback, so private support text stays inside this container.
 ENV AI_PROVIDER=llamacpp \
     LLAMACPP_URL=http://127.0.0.1:8080 \
-    LLAMACPP_MODEL=/app/models/smollm2-135m-instruct-q3_k_m.gguf
+    LLAMACPP_MODEL=/app/models/smollm2-135m-instruct-q3_k_m.gguf \
+    LD_LIBRARY_PATH=/opt/llama/lib:/opt/llama/usr-lib
 RUN mkdir -p .data
 # Render and most hosts inject PORT; the server falls back to 3001 locally.
 ENV PORT=3001
