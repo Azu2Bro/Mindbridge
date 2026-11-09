@@ -96,12 +96,12 @@ test('self-hosted summaries drive matching; malformed AI output falls back local
 test('Hugging Face uses an open-source model through the router', async (t) => {
  setEnv(t, 'AI_PROVIDER', 'huggingface')
  setEnv(t, 'HF_API_TOKEN', 'hf_test_token')
- setEnv(t, 'HF_MODEL', 'Qwen/Qwen2.5-7B-Instruct')
+ setEnv(t, 'HF_MODEL', 'meta-llama/Llama-3.1-8B-Instruct')
  const fetchMock = t.mock.method(globalThis, 'fetch', async (url, options) => {
    assert.equal(url, 'https://router.huggingface.co/v1/chat/completions')
    assert.equal(options.headers.Authorization, 'Bearer hf_test_token')
    const request = JSON.parse(options.body)
-   assert.equal(request.model, 'Qwen/Qwen2.5-7B-Instruct')
+   assert.equal(request.model, 'meta-llama/Llama-3.1-8B-Instruct')
    return {
      ok: true,
      json: async () => ({
