@@ -132,12 +132,12 @@ const resources = [
 
 const resourceIconMap = { Wind, Headphones, Coffee, FileText, MoonStar, HeartHandshake, BookOpen }
 const resourceImageMap = {
-  Anxiety: '/resource-anxiety.svg',
-  Burnout: '/resource-burnout.svg',
-  Mindfulness: '/resource-mindfulness.svg',
-  Sleep: '/resource-sleep.svg',
-  'Self-care': '/resource-self-care.svg',
-  Loneliness: '/resource-loneliness.svg',
+  Anxiety: '/resource-anxiety.jpg',
+  Burnout: '/resource-burnout.jpg',
+  Mindfulness: '/resource-mindfulness.jpg',
+  Sleep: '/resource-sleep.jpg',
+  'Self-care': '/resource-self-care.jpg',
+  Loneliness: '/resource-loneliness.jpg',
 }
 const resourceImage = (resource) => resource.image || resourceImageMap[resource.category]
 
