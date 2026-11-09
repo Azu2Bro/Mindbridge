@@ -440,6 +440,13 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     }).map((volunteer) => volunteerProfile(volunteer, volunteer.matchScore))
     res.json({ volunteers: ranked })
   })
+  app.get('/api/volunteer-directory', (req, res) => {
+    const volunteers = dataStore.data.users
+      .filter((user) => user.role === 'volunteer' && user.status === 'active' && user.emailVerified)
+      .sort((a, b) => Number(b.availability === 'available') - Number(a.availability === 'available') || (b.rating || 0) - (a.rating || 0))
+      .map((volunteer) => volunteerProfile(volunteer, undefined))
+    res.json({ volunteers })
+  })
 
   app.get('/api/support-requests', (req, res) => {
     const data = dataStore.snapshot()

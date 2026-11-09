@@ -26,6 +26,7 @@ import {
   HeartHandshake,
   Info,
   LayoutDashboard,
+  Languages,
   Leaf,
   LifeBuoy,
   LoaderCircle,
@@ -68,6 +69,7 @@ const navItems = [
   { id: 'messages', label: 'Messages', icon: MessageCircle },
   { id: 'community', label: 'Community', icon: Users },
   { id: 'mood', label: 'Mood journal', icon: SmilePlus },
+  { id: 'volunteers', label: 'Peer volunteers', icon: UserRoundCheck },
   { id: 'resources', label: 'Resources', icon: BookOpen },
 ]
 
@@ -212,7 +214,7 @@ function App() {
   useEffect(() => {
     if (!user) return undefined
     if (user.role === 'user') api.moods().then(({ moods }) => {
-      setMoodEntries(moods.slice(-7).map((entry) => ({
+      setMoodEntries(moods.map((entry) => ({
         id: entry.id,
         day: new Date(entry.createdAt).toLocaleDateString(undefined, { weekday: 'short' }),
         score: entry.score,
@@ -234,18 +236,6 @@ function App() {
     }
   }, [user?.id, user?.role])
 
-  useEffect(() => {
-    const openSearch = (event) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault()
-        navigate('resources')
-        window.setTimeout(() => window.dispatchEvent(new CustomEvent('mentalbridge:focus-resource-search')), 50)
-      }
-    }
-    window.addEventListener('keydown', openSearch)
-    return () => window.removeEventListener('keydown', openSearch)
-  }, [])
-
   const navigate = (id) => {
     setActive(id)
     setSidebarOpen(false)
@@ -258,6 +248,7 @@ function App() {
     messages: ['Messages', 'A private space for your peer-support conversations.'],
     community: ['Community', 'Real people, honest moments, shared gently.'],
     mood: ['Mood journal', 'Notice patterns without judging the day.'],
+    volunteers: ['Peer volunteers', 'Meet the people who make peer support feel human.'],
     resources: ['Resource library', 'Practical tools for wherever you are today.'],
     admin: ['Care operations', 'Safety, coordination, and community health at a glance.'],
     settings: ['Account & privacy', 'Control your identity, preferences, and availability.'],
@@ -271,6 +262,7 @@ function App() {
     messages: <MessagesView showToast={showToast} user={user} onNavigate={navigate} />,
     community: <CommunityView showToast={showToast} user={user} />,
     mood: <MoodView moodEntries={moodEntries} setMoodEntries={setMoodEntries} showToast={showToast} />,
+    volunteers: <VolunteerDirectory onNavigate={navigate} />,
     resources: <ResourcesView showToast={showToast} user={user} />,
     admin: <AdminView showToast={showToast} user={user} />,
     settings: <SettingsView user={user} refreshUser={refreshUser} showToast={showToast} />,
@@ -297,9 +289,6 @@ function App() {
           </div>
           <div className="topbar-actions">
             <button className="icon-button" aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>{theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}</button>
-            <button className="search-button" onClick={() => navigate('resources')} aria-label="Search resources">
-              <Search size={18} /><span>Search</span><kbd>Ctrl K</kbd>
-            </button>
             <div className="popover-wrap">
               <button className="icon-button notification-button" aria-label="Notifications" aria-expanded={notificationsOpen} onClick={() => { setNotificationsOpen(!notificationsOpen); setProfileOpen(false) }}>
                 <Bell size={19} />{unreadNotifications > 0 && <span className="notification-dot" />}
@@ -989,10 +978,46 @@ function MoodView({ moodEntries, setMoodEntries, showToast }) {
       <section className="mood-insights">
         <div className="insight-stats"><div><span className="status-icon sage"><TrendingUp size={20} /></span><p><small>Average</small><b>{average}<em>/5</em></b></p></div><div><span className="status-icon coral"><Activity size={20} /></span><p><small>Check-in rhythm</small><b>{moodEntries.length}<em>days</em></b></p></div><div><span className="status-icon blue"><CalendarDays size={20} /></span><p><small>Best day</small><b>{bestEntry?.day || '—'}</b></p></div></div>
         <div className="mood-chart-card"><div className="section-heading compact"><div><span className="eyebrow">{showAll ? 'ALL CHECK-INS' : 'YOUR LAST 7 CHECK-INS'}</span><h2>Your mood pattern</h2></div><button className={`icon-button ${showAll ? 'saved' : ''}`} aria-label="Toggle complete mood history" onClick={() => setShowAll(!showAll)}><Filter size={17} /></button></div><div className="mood-chart" aria-label="Mood trend chart">{chartEntries.map((entry, index) => <div className="chart-column" key={`${entry.id || entry.day}-${index}`} title={entry.journal || moods[entry.score - 1]?.label}><span className="chart-score">{moods[entry.score - 1]?.face}</span><i style={{ height: `${(entry.score / 5) * maxHeight}px` }} /><small>{entry.day}</small></div>)}</div><p className="chart-note"><Sparkles size={15} /> Patterns are information, not judgment. Every check-in can help you notice what supports you.</p></div>
+        <div className="mood-notes-card"><div className="section-heading compact"><div><span className="eyebrow">YOUR NOTES</span><h2>What you wanted to remember</h2></div></div>{chartEntries.filter((entry) => entry.journal?.trim()).length ? <div className="mood-notes-list">{chartEntries.filter((entry) => entry.journal?.trim()).slice().reverse().map((entry, index) => <article key={`${entry.id || entry.day}-${index}`}><span>{moods[entry.score - 1]?.face}</span><div><b>{entry.day}</b><p>{entry.journal}</p></div></article>)}</div> : <p className="empty-copy">Add a note to a check-in and it will appear here.</p>}</div>
         <div className="pattern-card"><div><span className="eyebrow">A PATTERN TO NOTICE</span><h3>Movement seems to help</h3><p>On days where you mentioned going outside, your check-in was an average of 0.8 points higher.</p></div><span className="pattern-icon"><Leaf size={28} /></span></div>
       </section>
     </div>
   )
+}
+
+function VolunteerDirectory({ onNavigate }) {
+  const [volunteers, setVolunteers] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  const load = async () => {
+    setError('')
+    try { setVolunteers((await api.volunteerDirectory()).volunteers) }
+    catch (requestError) { setError(requestError.message) }
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => { load() }, [])
+
+  return <div className="volunteer-directory">
+    <section className="volunteer-directory-hero">
+      <div><span className="eyebrow light"><HeartHandshake size={14} /> PEOPLE WHO LISTEN</span><h2>Find a peer who gets it.</h2><p>Every volunteer brings their own lived experience, communication style, and way of making space for difficult days. Read about them before you decide whether to reach out.</p></div>
+      <div className="volunteer-directory-art"><Users size={42} /></div>
+    </section>
+    {error && <InlineError message={error} onRetry={load} />}
+    {loading ? <div className="empty-state"><LoaderCircle className="spin" size={28} /><p>Finding your peer support team…</p></div> : volunteers.length ? <div className="volunteer-card-grid">{volunteers.map((volunteer) => <article className="volunteer-directory-card" key={volunteer.id}>
+      <div className="volunteer-card-head"><span className="avatar xl" style={{ background: volunteer.avatarColor }}>{volunteer.displayName.split(' ').map((part) => part[0]).join('').slice(0, 2)}<span className={`availability-dot ${volunteer.availability}`} /></span><div><h3>{volunteer.displayName}</h3><span className={`availability-label ${volunteer.availability}`}>{volunteer.availability === 'available' ? 'Available for new connections' : volunteer.availability === 'limited' ? 'Limited availability' : 'Currently away'}</span></div></div>
+      <p className="volunteer-card-bio">“{volunteer.bio}”</p>
+      <div className="volunteer-card-stat"><span><StarRating rating={volunteer.rating} /> {volunteer.rating?.toFixed(1) || 'New'}</span><span>{volunteer.yearsActive || 0} years volunteering</span></div>
+      <div className="volunteer-card-section"><b>Specialties</b><div className="expertise-row">{(volunteer.expertise || []).map((item) => <span key={item}>{item}</span>)}</div></div>
+      <div className="volunteer-card-details"><span><Languages size={14} /> {(volunteer.languages || []).join(' · ')}</span><span><MessageCircle size={14} /> {volunteer.communicationStyle}</span></div>
+      <button className="button button-dark full" onClick={() => onNavigate('support')}>Find support with this team <ArrowRight size={16} /></button>
+    </article>)}</div> : <div className="empty-state"><Users size={29} /><h3>No peer volunteers are listed yet</h3><p>Our care team is preparing the next group of available peer supporters.</p></div>}
+  </div>
+}
+
+function StarRating({ rating }) {
+  return <span className="star-rating" aria-label={`${rating || 0} out of 5 stars`}>★</span>
 }
 
 function LegacyResourcesView({ showToast }) {
@@ -1063,7 +1088,7 @@ function ResourcesView({ showToast, user }) {
     catch (requestError) { showToast(requestError.message) }
   }
   const filtered = savedOnly ? resourceItems.filter((resource) => bookmarked.includes(resource.id)) : resourceItems
-  return <div className="resources-layout"><section className="resource-hero"><div><span className="eyebrow light"><BookOpen size={14} /> YOUR PRACTICAL TOOLKIT</span><h2>Something helpful for this moment.</h2><p>Explore trusted, plain-language resources chosen for real life—not perfect days.</p><label><Search size={18} /><input id="resource-search" aria-label="Search resources" placeholder="Search anxiety, sleep, grounding…" value={query} onChange={(event) => setQuery(event.target.value)} /></label></div><div className="resource-hero-art"><span><Leaf size={42} /></span><i /><i /></div></section><div className="resource-filter-row"><div>{categories.map((item) => <button key={item} className={category === item ? 'active' : ''} onClick={() => setCategory(item)}>{item}</button>)}</div>{canBookmark && <button className={`saved-filter ${savedOnly ? 'active' : ''}`} onClick={() => setSavedOnly(!savedOnly)}><Bookmark size={16} fill={savedOnly ? 'currentColor' : 'none'} /> Saved ({bookmarked.length})</button>}</div>{error && <InlineError message={error} onRetry={load} />}
+  return <div className="resources-layout"><section className="resource-hero"><div><span className="eyebrow light"><BookOpen size={14} /> YOUR PRACTICAL TOOLKIT</span><h2>Something helpful for this moment.</h2><p>Explore trusted, plain-language resources chosen for real life—not perfect days.</p><label><Search size={18} /><input id="resource-search" aria-label="Search resources" placeholder="Search anxiety, sleep, grounding…" value={query} onChange={(event) => { setSavedOnly(false); setQuery(event.target.value) }} /></label></div><div className="resource-hero-art"><span><Leaf size={42} /></span><i /><i /></div></section><div className="resource-filter-row"><div>{categories.map((item) => <button key={item} className={category === item ? 'active' : ''} onClick={() => { setSavedOnly(false); setCategory(item) }}>{item}</button>)}</div>{canBookmark && <button className={`saved-filter ${savedOnly ? 'active' : ''}`} aria-pressed={savedOnly} onClick={() => { if (savedOnly) setSavedOnly(false); else { setQuery(''); setCategory('All'); setSavedOnly(true) } }}><Bookmark size={16} fill={savedOnly ? 'currentColor' : 'none'} /> {savedOnly ? 'All resources' : 'Saved resources'} ({bookmarked.length})</button>}</div>{error && <InlineError message={error} onRetry={load} />}
     {filtered.length ? <div className="resource-grid">{filtered.map((resource) => { const Icon = resourceIconMap[resource.icon] || BookOpen; const saved = bookmarked.includes(resource.id); return <article className={`resource-card ${resource.featured ? 'featured' : ''}`} key={resource.id}><div className={`resource-card-art ${resource.color}`}><Icon size={resource.featured ? 42 : 30} strokeWidth={1.5} />{resource.featured && <span>Recommended for you</span>}</div><div className="resource-card-body"><div className="resource-card-meta"><span>{resource.category}</span><i>·</i><span>{resource.type}</span></div><h3>{resource.title}</h3><p>{resource.description}</p><div><button className="text-button" onClick={() => setSelected(resource)}>Open resource <ArrowUpRight size={15} /></button>{canBookmark && <button className={`icon-button ${saved ? 'saved' : ''}`} aria-label={`${saved ? 'Remove' : 'Add'} bookmark for ${resource.title}`} onClick={() => toggleBookmark(resource.id)}><Bookmark size={17} fill={saved ? 'currentColor' : 'none'} /></button>}</div></div></article> })}</div> : !error && <div className="empty-state"><Search size={29} /><h3>{savedOnly ? 'No saved resources yet' : 'No resources found'}</h3><p>{savedOnly ? 'Bookmark a resource to keep it here.' : 'Try a broader word or another category.'}</p><button className="text-button" onClick={() => { setQuery(''); setCategory('All'); setSavedOnly(false) }}>Clear filters <RefreshCcw size={14} /></button></div>}
     {selected && <SimpleModal title={selected.title} onClose={() => setSelected(null)} wide><div className="resource-reader-meta"><span>{selected.category}</span><span>{selected.type}</span></div><p className="resource-reader-intro">{selected.description}</p><div className="resource-content">{selected.content}</div>{selected.url && /^https:\/\//.test(selected.url) && <p><a className="button button-dark" href={selected.url} target="_blank" rel="noopener noreferrer">Open book / workbook <ExternalLink size={16} /></a><small className="resource-source">Published by {selected.source}</small></p>}<div className="safety-note"><Info size={17} /><span>Educational information only. It does not replace professional mental healthcare.</span></div>{canBookmark && <button className="button button-secondary" onClick={() => toggleBookmark(selected.id)}><Bookmark size={16} /> {bookmarked.includes(selected.id) ? 'Remove bookmark' : 'Save resource'}</button>}</SimpleModal>}
   </div>

@@ -98,7 +98,6 @@ export default function AuthScreen({ initialMode = 'login', onClose }) {
       <div className="auth-dialog-story">
         <div className="auth-brand"><span className="brand-mark"><HeartHandshake size={23} /></span><span>Mental<span>Bridge</span></span></div>
         <div><span className="eyebrow light">PRIVATE · VERIFIED · HUMAN</span><h2>A safer doorway to peer support.</h2><p>Every account uses a verified email. Community participation stays anonymous.</p></div>
-        <div className="auth-trust-list"><span><Check size={15} /> Anonymous community identity</span><span><Check size={15} /> Role-protected staff access</span><span><Check size={15} /> Moderated with care</span></div>
       </div>
       <form className="auth-card" onSubmit={submit}>
         {onClose && <button type="button" className="auth-close" aria-label="Close sign in" onClick={onClose}><X size={19} /></button>}
@@ -118,7 +117,7 @@ export default function AuthScreen({ initialMode = 'login', onClose }) {
           {mode === 'login' && <button type="button" className="forgot-link" onClick={() => changeMode('forgot')}>Forgot your password?</button>}
           {error && <div className="auth-error" role="alert">{error}{staffHint && <a className="auth-error-link" href="/staff">Go to the staff portal <ArrowRight size={13} /></a>}</div>}
           {notice && <div className="auth-notice" role="status">{notice}</div>}
-          <button className="button button-dark auth-submit" disabled={loading}>{loading ? <><LoaderCircle className="spin" size={17} /> Please wait…</> : <>{mode === 'login' ? 'Sign in securely' : mode === 'register' ? 'Create & verify account' : mode === 'resend' ? 'Send verification link' : mode === 'forgot' ? 'Send reset link' : 'Save new password'} <ArrowRight size={17} /></>}</button>
+          <button className="button button-dark auth-submit" disabled={loading}>{loading ? <><LoaderCircle className="spin" size={17} /> Please wait…</> : <>{mode === 'login' ? 'Login' : mode === 'register' ? 'Create & verify account' : mode === 'resend' ? 'Send verification link' : mode === 'forgot' ? 'Send reset link' : 'Save new password'} <ArrowRight size={17} /></>}</button>
           <div className="auth-switch">{mode === 'login' ? 'New to MentalBridge?' : 'Ready to return?'} <button type="button" onClick={() => changeMode(mode === 'login' ? 'register' : 'login')}>{mode === 'login' ? 'Create an account' : 'Sign in'}</button></div>
         </>}
         <div className="auth-security"><ShieldCheck size={16} /> MentalBridge never displays your email publicly.</div>

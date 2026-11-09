@@ -70,6 +70,7 @@ export const api = {
   dashboard: () => request('/dashboard'),
   analyze: (text) => request('/ai/analyze', { ...json('POST', { text }), timeoutMs: 55000 }),
   volunteers: (tags = [], priorities = []) => request(`/volunteers?tags=${encodeURIComponent(tags.join(','))}&priorities=${encodeURIComponent(priorities.join(','))}`),
+  volunteerDirectory: () => request('/volunteer-directory'),
   supportRequests: () => request('/support-requests'),
   createSupportRequest: (supportRequest) => request('/support-requests', json('POST', supportRequest)),
   updateSupportRequest: (requestId, updates) => request(`/support-requests/${requestId}`, json('PATCH', updates)),
