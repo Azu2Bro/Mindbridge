@@ -73,7 +73,7 @@ services:
           envVarKey: RENDER_EXTERNAL_URL
 
       - key: AI_PROVIDER
-        value: huggingface
+        value: groq
       # This deployment is a prototype, so its varied sample peer profiles are
       # returned by the real API and clearly labeled in the matching UI.
       - key: ALLOW_DEMO_MATCHES
@@ -84,10 +84,10 @@ services:
         sync: false
 
       # Optional providers require explicit AI_PROVIDER selection.
-      - key: HF_API_TOKEN
+      - key: GROQ_API_KEY
         sync: false
-      - key: HF_MODEL
-        value: openai/gpt-oss-120b
+      - key: GROQ_MODEL
+        value: llama-3.1-8b-instant
       # Preferred provider for real AI-assisted support summaries. Gemini is
       # used before OpenAI when both keys are configured.
       - key: GEMINI_API_KEY

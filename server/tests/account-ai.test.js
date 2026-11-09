@@ -93,15 +93,15 @@ test('self-hosted summaries drive matching; malformed AI output falls back local
   assert.deepEqual(embedded.tags, ['Work stress'])
 })
 
-test('Hugging Face uses an open-source model through the router', async (t) => {
- setEnv(t, 'AI_PROVIDER', 'huggingface')
- setEnv(t, 'HF_API_TOKEN', 'hf_test_token')
- setEnv(t, 'HF_MODEL', 'openai/gpt-oss-120b')
+test('Groq uses an open-source model through its chat API', async (t) => {
+ setEnv(t, 'AI_PROVIDER', 'groq')
+ setEnv(t, 'GROQ_API_KEY', 'hf_test_token')
+ setEnv(t, 'GROQ_MODEL', 'llama-3.1-8b-instant')
  const fetchMock = t.mock.method(globalThis, 'fetch', async (url, options) => {
-   assert.equal(url, 'https://router.huggingface.co/v1/chat/completions')
+   assert.equal(url, 'https://api.groq.com/openai/v1/chat/completions')
    assert.equal(options.headers.Authorization, 'Bearer hf_test_token')
    const request = JSON.parse(options.body)
-   assert.equal(request.model, 'openai/gpt-oss-120b')
+   assert.equal(request.model, 'llama-3.1-8b-instant')
    return {
      ok: true,
      json: async () => ({
@@ -110,7 +110,7 @@ test('Hugging Face uses an open-source model through the router', async (t) => {
    }
  })
  const result = await analyzeSupportText('Work deadlines are overwhelming this week.')
- assert.equal(result.provider, 'huggingface')
+ assert.equal(result.provider, 'groq')
  assert.deepEqual(result.tags, ['Work stress'])
  fetchMock.mock.restore()
 })

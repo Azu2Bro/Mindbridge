@@ -151,22 +151,17 @@ async function analyzeWithGemini(text) {
   return normalizeModelAnalysis(JSON.parse(output))
 }
 
-async function analyzeWithHuggingFace(text, local) {
-  if (!process.env.HF_API_TOKEN) throw new Error('Hugging Face token is not configured')
+async function analyzeWithGroq(text, local) {
+  if (!process.env.GROQ_API_KEY) throw new Error('Groq API key is not configured')
   const grounded = groundedAnalysis(local)
-  let lastError
-  const models = ['openai/gpt-oss-120b', 'meta-llama/Llama-3.1-8B-Instruct']
-  for (const model of [...new Set(models)]) {
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        const response = await fetch('https://router.huggingface.co/v1/chat/completions', {
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${process.env.HF_API_TOKEN}`,
+          Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model,
+          model: process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
           messages: [
             { role: 'system', content: `${analysisInstruction(grounded.tags)} Return valid JSON only.` },
             { role: 'user', content: text },
@@ -177,21 +172,13 @@ async function analyzeWithHuggingFace(text, local) {
         }),
         signal: AbortSignal.timeout(20000),
       })
-      if (!response.ok) {
-        const detail = await response.text()
-        throw new Error(`Hugging Face request failed (${response.status}): ${detail.slice(0, 180)}`)
-      }
-      const payload = await response.json()
-      const rawContent = payload.choices?.[0]?.message?.content || payload.choices?.[0]?.text
-      const content = Array.isArray(rawContent) ? rawContent.map((part) => part.text || '').join('') : rawContent
-        return normalizeModelAnalysis(parseModelJson(content), grounded.tags)
-      } catch (error) {
-        lastError = error
-        if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 750))
-      }
-    }
+  if (!response.ok) {
+    const detail = await response.text()
+    throw new Error(`Groq request failed (${response.status}): ${detail.slice(0, 180)}`)
   }
-  throw lastError
+  const payload = await response.json()
+  const content = payload.choices?.[0]?.message?.content
+  return normalizeModelAnalysis(parseModelJson(content), grounded.tags)
 }
 
 export async function analyzeSupportText(text) {
@@ -233,13 +220,13 @@ export async function analyzeSupportText(text) {
       return { ...local, fallbackReason: 'The AI service is unavailable. Review this basic local summary before continuing.' }
     }
   }
-  if (provider === 'huggingface') {
+  if (provider === 'groq') {
     try {
-      const parsed = await analyzeWithHuggingFace(text, local)
-      return { ...parsed, riskLevel: 'standard', crisisNotice: null, provider: 'huggingface' }
+      const parsed = await analyzeWithGroq(text, local)
+      return { ...parsed, riskLevel: 'standard', crisisNotice: null, provider: 'groq' }
     } catch (error) {
-      console.error('Hugging Face open-source model failed; using local analyzer:', error.message)
-      return { ...local, provider: 'local', fallbackReason: `Hugging Face analysis failed: ${error.message}` }
+      console.error('Groq open-source model failed; using local analyzer:', error.message)
+      return { ...local, provider: 'local', fallbackReason: `Groq analysis failed: ${error.message}` }
     }
   }
 
