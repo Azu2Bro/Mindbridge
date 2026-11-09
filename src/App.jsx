@@ -293,7 +293,7 @@ function App() {
               <button className="icon-button notification-button" aria-label="Notifications" aria-expanded={notificationsOpen} onClick={() => { setNotificationsOpen(!notificationsOpen); setProfileOpen(false) }}>
                 <Bell size={19} />{unreadNotifications > 0 && <span className="notification-dot" />}
               </button>
-              {notificationsOpen && <NotificationPopover onClose={() => setNotificationsOpen(false)} />}
+              {notificationsOpen && <NotificationPopover onClose={() => setNotificationsOpen(false)} onNavigate={navigate} />}
             </div>
             <div className="popover-wrap">
               <button className="profile-trigger" onClick={() => { setProfileOpen(!profileOpen); setNotificationsOpen(false) }} aria-label="Open profile menu">
@@ -1212,7 +1212,7 @@ function InlineError({ message, onRetry, compact = false }) {
   return <div className={`inline-error ${compact ? 'compact' : ''}`} role="alert"><Info size={18} /><span>{message}</span>{onRetry && <button onClick={onRetry}>Try again</button>}</div>
 }
 
-function NotificationPopover({ onClose }) {
+function NotificationPopover({ onClose, onNavigate }) {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -1238,7 +1238,12 @@ function NotificationPopover({ onClose }) {
     finally { setSaving(false) }
   }
   const icon = (type) => type === 'message' ? <MessageCircle size={17} /> : type === 'session' ? <CalendarDays size={17} /> : <BookOpen size={17} />
-  return <section className="popover notification-popover" role="dialog" aria-label="Notifications"><div className="popover-head"><h3>Notifications</h3><button disabled={saving || !items.some((item) => !item.read)} onClick={markRead}>{saving ? 'Saving…' : 'Mark all read'}</button><button aria-label="Close notifications" onClick={onClose}><X size={17} /></button></div>{error && <InlineError message={error} onRetry={load} compact />}<div className="notification-list">{items.map((item) => <div key={item.id} className={`notification-item ${item.read ? '' : 'unread'}`}><span className={`status-icon ${item.type === 'message' ? 'coral' : item.type === 'session' ? 'sage' : 'blue'}`}>{icon(item.type)}</span><div><b>{item.title}</b><p>{item.body}</p><small>{new Date(item.createdAt).toLocaleString()}</small></div></div>)}{loading && <div className="popover-empty" role="status">Loading notifications…</div>}{!loading && !error && items.length === 0 && <div className="popover-empty">You’re all caught up.</div>}</div></section>
+  const openNotification = (item) => {
+    if (!item.read) markRead().catch(() => undefined)
+    onClose()
+    onNavigate(item.type === 'message' ? 'messages' : item.type === 'safety' || item.type === 'account' ? 'admin' : 'support')
+  }
+  return <section className="popover notification-popover" role="dialog" aria-label="Notifications"><div className="popover-head"><h3>Notifications</h3><button disabled={saving || !items.some((item) => !item.read)} onClick={markRead}>{saving ? 'Saving…' : 'Mark all read'}</button><button aria-label="Close notifications" onClick={onClose}><X size={17} /></button></div>{error && <InlineError message={error} onRetry={load} compact />}<div className="notification-list">{items.map((item) => <button type="button" key={item.id} className={`notification-item notification-item-clickable ${item.read ? '' : 'unread'}`} onClick={() => openNotification(item)}><span className={`status-icon ${item.type === 'message' ? 'coral' : item.type === 'session' ? 'sage' : 'blue'}`}>{icon(item.type)}</span><span><b>{item.title}</b><p>{item.body}</p><small>{new Date(item.createdAt).toLocaleString()}</small></span></button>)}{loading && <div className="popover-empty" role="status">Loading notifications…</div>}{!loading && !error && items.length === 0 && <div className="popover-empty">You’re all caught up.</div>}</div></section>
 }
 
 function ProfilePopover({ navigate, close, user, logout }) {
