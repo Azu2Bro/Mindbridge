@@ -73,17 +73,15 @@ services:
           envVarKey: RENDER_EXTERNAL_URL
 
       - key: AI_PROVIDER
-        value: ollama
+        value: llamacpp
       # This deployment is a prototype, so its varied sample peer profiles are
       # returned by the real API and clearly labeled in the matching UI.
       - key: ALLOW_DEMO_MATCHES
         value: "true"
-      # Reachable Ollama endpoint running an open-source model such as
-      # qwen2.5:1.5b. This cannot be 127.0.0.1 on Render.
-      - key: OLLAMA_URL
-        sync: false
-      - key: OLLAMA_MODEL
-        value: qwen2.5:1.5b
+      # A compact open-source model runs through llama.cpp in this container, so
+      # peer-support text never leaves the MentalBridge service for analysis.
+      - key: LLAMACPP_URL
+        value: http://127.0.0.1:8080
       - key: INITIAL_ADMIN_EMAIL
         sync: false
       - key: INITIAL_VOLUNTEER_EMAILS

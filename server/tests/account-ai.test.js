@@ -70,6 +70,20 @@ test('self-hosted summaries drive matching; malformed AI output falls back local
   const fallback = await analyzeSupportText('Work has been overwhelming this week.')
   assert.equal(fallback.provider, 'local')
   assert.ok(fallback.fallbackReason)
+
+  process.env.AI_PROVIDER = 'llamacpp'
+  setEnv(t, 'LLAMACPP_URL', 'http://127.0.0.1:8080')
+  fetchMock.mock.mockImplementation(async (url, options) => {
+    assert.equal(url, 'http://127.0.0.1:8080/completion')
+    const request = JSON.parse(options.body)
+    assert.equal(request.stream, false)
+    assert.equal(request.json_schema.type, 'object')
+    assert.match(request.prompt, /Work stress/)
+    return { ok: true, json: async () => ({ content: JSON.stringify({ summary: 'Work deadlines have been difficult this week.', tags: ['Work stress'], priorities: ['Work stress'] }) }) }
+  })
+  const embedded = await analyzeSupportText('Work deadlines are overwhelming this week.')
+  assert.equal(embedded.provider, 'llamacpp')
+  assert.deepEqual(embedded.tags, ['Work stress'])
 })
 
 test('matching varies by support themes, priorities, availability, and capacity', () => {

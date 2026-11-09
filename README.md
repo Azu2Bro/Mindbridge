@@ -100,7 +100,9 @@ are addressed to the requesting user's account email. Users verify their own
 email links, while only verified moderator and administrator accounts can sign
 in through the staff portal.
 
-The default AI provider is the open-source Ollama runtime with the Qwen2.5 1.5B model. Install [Ollama](https://ollama.com/download), pull the model with `ollama pull qwen2.5:1.5b`, and set `AI_PROVIDER=ollama`, `OLLAMA_URL=http://127.0.0.1:11434`, and `OLLAMA_MODEL=qwen2.5:1.5b`. On Render, `AI_PROVIDER=ollama` is enabled by `render.yaml`; set `OLLAMA_URL` in the Render dashboard to a reachable Ollama service. Do not use `127.0.0.1` there unless Ollama runs inside the same container. `npm run ai:serve` remains available for running only the local AI service.
+The default AI provider is the open-source Ollama runtime. For local development, install [Ollama](https://ollama.com/download), pull a model with `ollama pull qwen2.5:1.5b`, and set `AI_PROVIDER=ollama`, `OLLAMA_URL=http://127.0.0.1:11434`, and `OLLAMA_MODEL=qwen2.5:1.5b`.
+
+On Render, the compact open-weight `SmolLM2-135M-Instruct` model and a `llama.cpp` server are packaged inside the MentalBridge Docker image. The model server binds only to the container loopback address, so support text does not leave the MentalBridge service for AI analysis. Do not replace it with a home public IP: residential firewalls, changing addresses, and an offline computer make that connection unreliable. `npm run ai:serve` remains available for running only the local AI service.
 
 The model summarizes requests and extracts themes; the local matcher ranks verified, available volunteers using those themes. Urgent-language screening stays local. A failed or timed-out model request uses a clearly labeled basic local analysis and never silently sends the request to a paid provider. `AI_PROVIDER=local` disables model calls; explicitly selecting `gemini` or `openai` enables those optional integrations. Health reports the selected provider, not model readiness. API details: [Ollama chat](https://docs.ollama.com/api/chat).
 
