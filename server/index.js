@@ -871,6 +871,7 @@ function lanAddresses() {
 export async function startServer({ store } = {}) {
   if (process.env.NODE_ENV === 'production' && !process.env.JWT_SECRET) throw new Error('JWT_SECRET is required in production')
   if (process.env.NODE_ENV === 'production' && !process.env.SMTP_HOST) throw new Error('SMTP_HOST is required in production for mandatory email verification')
+  if (process.env.NODE_ENV === 'production' && !process.env.SMTP_FROM) throw new Error('SMTP_FROM is required in production for mandatory email verification')
   const app = await createApp({ store })
   const server = createServer(app)
   const configuredOrigins = process.env.CLIENT_ORIGIN?.split(',').map((item) => item.trim()).filter(Boolean)

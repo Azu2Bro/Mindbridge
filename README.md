@@ -78,10 +78,12 @@ GOOGLE_CLIENT_ID=
 MONGODB_URI=
 MONGODB_DATABASE=mentalbridge
 APP_URL=http://localhost:5173
-SMTP_HOST=
-SMTP_PORT=587
-SMTP_USER=
+SMTP_HOST=smtp.sendgrid.net
+SMTP_PORT=2525
+SMTP_SECURE=false
+SMTP_USER=apikey
 SMTP_PASSWORD=
+SMTP_FROM="MentalBridge <verified-sender@example.com>"
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-5.6-luna
 GEMINI_API_KEY=
@@ -90,6 +92,13 @@ GEMINI_MODEL=gemini-3.5-flash
 
 `CLIENT_ORIGIN` only matters while the Vite dev server serves the frontend from a different port.
 After `npm start` the API serves the app itself, so there is a single origin and no CORS to configure.
+
+For SendGrid, create an API key with mail-sending permission and set it as
+`SMTP_PASSWORD`. Verify the address or domain used by `SMTP_FROM` in SendGrid.
+`SMTP_FROM` controls who the message is from; signup and password-reset messages
+are addressed to the requesting user's account email. Users verify their own
+email links, while only verified moderator and administrator accounts can sign
+in through the staff portal.
 
 The default AI provider is self-hosted Ollama with the Apache-2.0 Qwen2.5 1.5B model. `npm run dev` now starts the local AI runtime automatically. Install [Ollama](https://ollama.com/download) and pull the model with `ollama pull qwen2.5:1.5b` when the portable runtime or model is not already present (portable Windows command: `.\.data\ollama\ollama.exe pull qwen2.5:1.5b`). Set `AI_PROVIDER=ollama`, `OLLAMA_URL=http://127.0.0.1:11434`, and `OLLAMA_MODEL=qwen2.5:1.5b`. `npm run ai:serve` remains available for running only the AI service; it uses `.data/ollama/ollama.exe` when present and keeps models in `.data/ollama-models`. Keep Ollama running on the API machine (or configure a trusted private inference server). Inference has no provider request quota, but needs enough RAM/CPU and remains subject to the app's abuse-protection rate limit. A remote deployment needs its own reachable Ollama service; installing it on your laptop does not enable it on Render.
 
