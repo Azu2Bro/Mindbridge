@@ -73,7 +73,11 @@ services:
           envVarKey: RENDER_EXTERNAL_URL
 
       - key: AI_PROVIDER
-        value: local
+        value: ollama
+      # Reachable Ollama endpoint running an open-source model such as
+      # qwen2.5:1.5b. This cannot be 127.0.0.1 on Render.
+      - key: OLLAMA_URL
+        sync: false
       - key: OLLAMA_MODEL
         value: qwen2.5:1.5b
       - key: INITIAL_ADMIN_EMAIL
