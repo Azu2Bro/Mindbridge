@@ -168,6 +168,7 @@ function App() {
   const [accountLinkOpen, setAccountLinkOpen] = useState(() => { const params = new URLSearchParams(window.location.search); return params.has('verify') || params.has('reset') || params.get('mode') === 'forgot' })
   const [theme, setTheme] = useStoredState('mentalbridge-theme', window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [openVolunteerApplication, setOpenVolunteerApplication] = useState(false)
   const [supportOpen, setSupportOpen] = useState(() => new URLSearchParams(window.location.search).get('support') === 'open')
   const [profileOpen, setProfileOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
@@ -246,8 +247,9 @@ function App() {
     }
   }, [user?.id, user?.role])
 
-  const navigate = (id) => {
+  const navigate = (id, options = {}) => {
     setActive(id)
+    setOpenVolunteerApplication(id === 'settings' && options.volunteer === true)
     setSidebarOpen(false)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -275,7 +277,7 @@ function App() {
     volunteers: <VolunteerDirectory onNavigate={navigate} />,
     resources: <ResourcesView showToast={showToast} user={user} />,
     admin: <AdminView showToast={showToast} user={user} />,
-    settings: <SettingsView user={user} refreshUser={refreshUser} showToast={showToast} />,
+    settings: <SettingsView user={user} refreshUser={refreshUser} showToast={showToast} openVolunteerApplication={openVolunteerApplication} />,
     help: <HelpView onNavigate={navigate} user={user} />,
     safety: <SafetyView />,
   }[active]
@@ -377,7 +379,7 @@ function Sidebar({ active, navigate, open, onClose, user, counts }) {
               <Icon size={19} strokeWidth={1.9} /><span>{label}</span>{counts[id] > 0 && <em aria-label={`${label} count`}>{counts[id]}</em>}
             </button>
           ))}
-          {user.role === 'user' && <button className="nav-item volunteer-apply-nav" onClick={() => navigate('settings')}><HeartHandshake size={19} strokeWidth={1.9} /><span>Become a volunteer</span></button>}
+          {user.role === 'user' && <button className="nav-item volunteer-apply-nav" onClick={() => navigate('settings', { volunteer: true })}><HeartHandshake size={19} strokeWidth={1.9} /><span>Become a volunteer</span></button>}
         </nav>
         <div className="sidebar-spacer" />
         {user.role === 'user' && <div className="supporter-card">
@@ -1193,9 +1195,12 @@ function StatCard({ icon: Icon, label, value, trend, color }) {
   return <div className="stat-card"><span className={`status-icon ${color}`}><Icon size={20} /></span><div><small>{label}</small><b>{value}</b><em>{trend}</em></div></div>
 }
 
-function SettingsView({ user, refreshUser, showToast }) {
-  const [volunteerApplicationOpen, setVolunteerApplicationOpen] = useState(false)
+function SettingsView({ user, refreshUser, showToast, openVolunteerApplication = false }) {
+  const [volunteerApplicationOpen, setVolunteerApplicationOpen] = useState(openVolunteerApplication)
   const [volunteerApplication, setVolunteerApplication] = useState({ experience: '', motivation: '' })
+  useEffect(() => {
+    if (openVolunteerApplication) setVolunteerApplicationOpen(true)
+  }, [openVolunteerApplication])
   const [form, setForm] = useState({
     displayName: user.displayName || '', anonymousName: user.anonymousName || '',
     showOnline: user.privacy?.showOnline ?? true, allowReminders: user.privacy?.allowReminders ?? true,
