@@ -23,11 +23,10 @@ function start(command, args, env = process.env) {
 
 start('/opt/llama/llama-server', [
   '--model', process.env.LLAMACPP_MODEL || '/app/models/smollm2-135m-instruct-q3_k_m.gguf',
-  '--host', '127.0.0.1',
+  '--host', '0.0.0.0',
   '--port', '8080',
-  '--ctx-size', '2048',
-  '--parallel', '1',
-  '--threads', process.env.LLAMACPP_THREADS || '2',
+  '--ctx-size', '1024',
+  '--threads', process.env.LLAMACPP_THREADS || '1',
 ])
 
 async function waitForAi() {
