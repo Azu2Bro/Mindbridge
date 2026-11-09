@@ -150,28 +150,41 @@ async function analyzeWithGemini(text) {
 async function analyzeWithHuggingFace(text, local) {
   if (!process.env.HF_API_TOKEN) throw new Error('Hugging Face token is not configured')
   const grounded = groundedAnalysis(local)
-  const response = await fetch('https://router.huggingface.co/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.HF_API_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: process.env.HF_MODEL || 'Qwen/Qwen2.5-7B-Instruct',
-      messages: [
-        { role: 'system', content: `${analysisInstruction(grounded.tags)} Return valid JSON only.` },
-        { role: 'user', content: text },
-      ],
-      temperature: 0.1,
-      max_tokens: 350,
-      stream: false,
-    }),
-    signal: AbortSignal.timeout(20000),
-  })
-  if (!response.ok) throw new Error(`Hugging Face request failed (${response.status})`)
-  const payload = await response.json()
-  const content = payload.choices?.[0]?.message?.content
-  return normalizeModelAnalysis(parseModelJson(content))
+  let lastError
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await fetch('https://router.huggingface.co/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${process.env.HF_API_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: process.env.HF_MODEL || 'Qwen/Qwen2.5-7B-Instruct',
+          messages: [
+            { role: 'system', content: `${analysisInstruction(grounded.tags)} Return valid JSON only.` },
+            { role: 'user', content: text },
+          ],
+          temperature: 0.1,
+          max_tokens: 350,
+          stream: false,
+        }),
+        signal: AbortSignal.timeout(20000),
+      })
+      if (!response.ok) {
+        const detail = await response.text()
+        throw new Error(`Hugging Face request failed (${response.status}): ${detail.slice(0, 180)}`)
+      }
+      const payload = await response.json()
+      const rawContent = payload.choices?.[0]?.message?.content || payload.choices?.[0]?.text
+      const content = Array.isArray(rawContent) ? rawContent.map((part) => part.text || '').join('') : rawContent
+      return normalizeModelAnalysis(parseModelJson(content))
+    } catch (error) {
+      lastError = error
+      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 750))
+    }
+  }
+  throw lastError
 }
 
 export async function analyzeSupportText(text) {
