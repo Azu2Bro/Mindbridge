@@ -18,8 +18,8 @@ RUN apt-get update && \
     npm ci --omit=dev && \
     mkdir -p /app/models && \
     curl --fail --location --retry 3 \
-      'https://huggingface.co/tensorblock/SmolLM2-135M-Instruct-GGUF/resolve/main/SmolLM2-135M-Instruct-Q4_K_M.gguf?download=true' \
-      --output /app/models/smollm2-135m-instruct-q4_k_m.gguf && \
+      'https://huggingface.co/tensorblock/SmolLM2-135M-Instruct-GGUF/resolve/main/SmolLM2-135M-Instruct-Q3_K_M.gguf?download=true' \
+      --output /app/models/smollm2-135m-instruct-q3_k_m.gguf && \
     apt-get purge -y curl && \
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*
@@ -32,7 +32,7 @@ COPY --from=llama /app /opt/llama
 # bound to loopback, so private support text stays inside this container.
 ENV AI_PROVIDER=llamacpp \
     LLAMACPP_URL=http://127.0.0.1:8080 \
-    LLAMACPP_MODEL=/app/models/smollm2-135m-instruct-q4_k_m.gguf
+    LLAMACPP_MODEL=/app/models/smollm2-135m-instruct-q3_k_m.gguf
 RUN mkdir -p .data
 # Render and most hosts inject PORT; the server falls back to 3001 locally.
 ENV PORT=3001
