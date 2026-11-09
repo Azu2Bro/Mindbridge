@@ -26,10 +26,14 @@
 
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
-body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--canvas); }
+html, body, #root { width: 100%; min-width: 0; }
+body { margin: 0; min-width: 320px; min-height: 100vh; overflow-x: hidden; background: var(--canvas); }
 button, input, textarea { font: inherit; }
 button { color: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
+img, svg { max-width: 100%; }
+button, input, textarea, select { max-width: 100%; }
+main, section, article, aside, header, footer, form, div { min-width: 0; }
 button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid rgba(238, 130, 93, .25); outline-offset: 2px; }
 button:disabled { opacity: .68; cursor: not-allowed !important; }
 h1, h2, h3, p { margin-top: 0; }
@@ -711,6 +715,57 @@ body { font-size: 16px; line-height: 1.55; }
   .notification-popover { position: fixed; top: 70px; right: 12px; left: auto; }
   .topbar { gap: 8px; }
   .page-heading { min-width: 0; flex: 1; }
-  .page-heading h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .page-heading h1 { overflow-wrap: anywhere; }
   .topbar-actions { flex-shrink: 0; gap: 3px; }
+}
+
+/* Narrow screens should wrap content instead of clipping it or creating a
+   second horizontal scrollbar. */
+@media (max-width: 560px) {
+  .topbar { min-height: 74px; height: auto; padding-top: 12px; padding-bottom: 12px; }
+  .page-heading h1 { font-size: 18px; line-height: 1.25; white-space: normal; }
+  .topbar-actions { align-self: flex-start; }
+  .page-content { padding-inline: 12px; }
+  .section-block, .rail-card, .settings-card, .settings-aside, .info-card, .faq-card, .admin-panel { padding-inline: 15px; }
+  .section-heading, .request-card-head, .rail-card-head, .report-list article > div { align-items: flex-start; flex-direction: column; }
+  .section-heading { gap: 8px; }
+  .section-heading .text-button, .section-heading .safe-label { display: inline-flex; }
+  .hero-card, .support-intro-card, .resource-hero, .info-hero { padding-inline: 20px; }
+  .hero-copy h2, .support-intro-copy h2, .resource-hero h2, .info-hero h2 { overflow-wrap: anywhere; }
+  .hero-actions, .request-actions, .admin-assignment { width: 100%; }
+  .hero-actions .button, .request-actions .button, .admin-assignment .button,
+  .admin-assignment select { width: 100%; }
+  .status-strip { padding-inline: 10px; }
+  .community-post, .request-card, .simple-modal > div { padding-inline: 15px; }
+  .community-post h2, .community-post > p, .post-preview h3, .resource-card h3,
+  .resource-card p, .notification-item b, .notification-item p, .profile-summary b,
+  .empty-match h3, .empty-match p, .auth-card h2, .auth-card > p,
+  .staff-card h2, .staff-card > p { overflow-wrap: anywhere; }
+  .comment-reply { margin-left: 12px; }
+  .landing-hero { padding-inline: 18px; }
+  .landing-hero h1 { font-size: clamp(38px, 12vw, 56px); overflow-wrap: anywhere; }
+  .landing-hero-copy > p, .landing-section-head p, .landing-feature-band p,
+  .landing-resources p { overflow-wrap: anywhere; }
+  .landing-emergency { width: calc(100% - 24px); padding-inline: 15px; }
+  .landing-emergency span { overflow-wrap: anywhere; }
+  .landing-float { max-width: calc(100% - 12px); }
+  .landing-float b, .landing-float small { white-space: normal; overflow-wrap: anywhere; }
+  .landing-float.volunteer { left: 4px; }
+  .landing-float.safe { right: 4px; }
+  .auth-dialog .auth-card { overflow-y: auto; }
+  .auth-field input, .auth-field-row input, .settings-grid input, .settings-grid select,
+  .settings-grid textarea, .modal-field input, .modal-field select, .modal-field textarea { min-width: 0; }
+  .staff-main { grid-template-columns: 1fr; }
+  .staff-intro h1 { font-size: clamp(34px, 10vw, 48px); overflow-wrap: anywhere; }
+  .staff-card { padding: 24px 18px; }
+}
+
+@media (max-width: 360px) {
+  .topbar { padding-inline: 10px; }
+  .topbar-actions { gap: 1px; }
+  .icon-button { width: 38px; height: 38px; }
+  .profile-trigger .avatar { width: 34px; height: 34px; }
+  .hero-card { padding-inline: 16px; }
+  .section-block, .rail-card, .settings-card, .settings-aside, .info-card, .faq-card, .admin-panel { padding-inline: 12px; }
+  .mobile-tabbar button small { font-size: 10px; }
 }

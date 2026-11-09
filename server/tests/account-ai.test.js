@@ -74,12 +74,18 @@ test('self-hosted summaries drive matching; malformed AI output falls back local
   process.env.AI_PROVIDER = 'llamacpp'
   setEnv(t, 'LLAMACPP_URL', 'http://127.0.0.1:8080')
   fetchMock.mock.mockImplementation(async (url, options) => {
-    assert.equal(url, 'http://127.0.0.1:8080/completion')
+    assert.equal(url, 'http://127.0.0.1:8080/v1/chat/completions')
     const request = JSON.parse(options.body)
     assert.equal(request.stream, false)
-    assert.equal(request.json_schema.type, 'object')
-    assert.match(request.prompt, /Work stress/)
-    return { ok: true, json: async () => ({ content: JSON.stringify({ summary: 'Work deadlines have been difficult this week.', tags: ['Work stress'], priorities: ['Work stress'] }) }) }
+    assert.equal(request.response_format.type, 'json_schema')
+    assert.equal(request.response_format.schema.type, 'object')
+    assert.match(request.messages[0].content, /Work stress/)
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: '```json\n{"summary":"Work deadlines have been difficult this week.","tags":["Work stress"],"priorities":["Work stress"]}\n```' } }],
+      }),
+    }
   })
   const embedded = await analyzeSupportText('Work deadlines are overwhelming this week.')
   assert.equal(embedded.provider, 'llamacpp')

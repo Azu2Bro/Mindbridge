@@ -51,6 +51,18 @@ function normalizeModelAnalysis(value) {
   return { summary: value.summary.trim().slice(0, 1200), tags, priorities: supportedPriorities.length ? supportedPriorities : tags.slice(0, 2) }
 }
 
+function parseModelJson(content) {
+  if (typeof content !== 'string') throw new Error('Model returned no text content')
+  const cleaned = content
+    .replace(/<\|[^|]+\|>/g, '')
+    .replace(/```(?:json)?/gi, '')
+    .trim()
+  const start = cleaned.indexOf('{')
+  const end = cleaned.lastIndexOf('}')
+  if (start < 0 || end <= start) throw new Error('Model returned no JSON object')
+  return JSON.parse(cleaned.slice(start, end + 1))
+}
+
 function groundedAnalysis(local) {
   const tags = local.tags.filter((tag) => tag !== 'Feeling overwhelmed')
   if (!tags.length) tags.push('Emotional support')
@@ -73,17 +85,27 @@ function analysisInstruction(tags) {
 
 async function analyzeWithLlamaCpp(text, local) {
   const grounded = groundedAnalysis(local)
-  const prompt = `<|im_start|>system\n${analysisInstruction(grounded.tags)}<|im_end|>\n<|im_start|>user\n${text}<|im_end|>\n<|im_start|>assistant\n`
   const baseUrl = (process.env.LLAMACPP_URL || 'http://127.0.0.1:8080').replace(/\/+$/, '')
-  const response = await fetch(`${baseUrl}/completion`, {
+  const response = await fetch(`${baseUrl}/v1/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, stream: false, n_predict: 350, temperature: 0.1, json_schema: grounded.schema }),
+    body: JSON.stringify({
+      model: 'local-model',
+      stream: false,
+      temperature: 0.1,
+      max_tokens: 350,
+      response_format: { type: 'json_schema', schema: grounded.schema },
+      messages: [
+        { role: 'system', content: analysisInstruction(grounded.tags) },
+        { role: 'user', content: text },
+      ],
+    }),
     signal: AbortSignal.timeout(20000),
   })
   if (!response.ok) throw new Error(`llama.cpp returned ${response.status}`)
   const payload = await response.json()
-  return normalizeModelAnalysis(JSON.parse(payload.content || ''))
+  const content = payload.choices?.[0]?.message?.content || payload.content
+  return normalizeModelAnalysis(parseModelJson(content))
 }
 
 async function analyzeWithGemini(text) {
@@ -144,7 +166,7 @@ export async function analyzeSupportText(text) {
       })
       if (!response.ok) throw new Error(`Ollama returned ${response.status}`)
       const payload = await response.json()
-      const parsed = normalizeModelAnalysis(JSON.parse(payload.message?.content || ''))
+      const parsed = normalizeModelAnalysis(parseModelJson(payload.message?.content))
       return { ...parsed, riskLevel: 'standard', crisisNotice: null, provider: 'ollama' }
     } catch (error) {
       console.warn('Ollama unavailable; using local theme matching:', error.message)
