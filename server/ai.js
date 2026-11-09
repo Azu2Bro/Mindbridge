@@ -86,7 +86,7 @@ function analysisInstruction(tags) {
 async function analyzeWithLlamaCpp(text, local) {
   const grounded = groundedAnalysis(local)
   const baseUrl = (process.env.LLAMACPP_URL || 'http://127.0.0.1:8080').replace(/\/+$/, '')
-  const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+  const request = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -101,11 +101,21 @@ async function analyzeWithLlamaCpp(text, local) {
       ],
     }),
     signal: AbortSignal.timeout(20000),
-  })
-  if (!response.ok) throw new Error(`llama.cpp returned ${response.status}`)
-  const payload = await response.json()
-  const content = payload.choices?.[0]?.message?.content || payload.content
-  return normalizeModelAnalysis(parseModelJson(content))
+  }
+  let lastError
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const response = await fetch(`${baseUrl}/v1/chat/completions`, request)
+      if (!response.ok) throw new Error(`llama.cpp returned ${response.status}`)
+      const payload = await response.json()
+      const content = payload.choices?.[0]?.message?.content || payload.content
+      return normalizeModelAnalysis(parseModelJson(content))
+    } catch (error) {
+      lastError = error
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 1500))
+    }
+  }
+  throw lastError
 }
 
 async function analyzeWithGemini(text) {

@@ -33,17 +33,20 @@ start('/opt/llama/llama-server', [
 
 async function waitForAi() {
   const healthUrl = `${(process.env.LLAMACPP_URL || 'http://127.0.0.1:8080').replace(/\/+$/, '')}/health`
-  for (let attempt = 0; attempt < 60 && !stopping; attempt++) {
+  for (let attempt = 0; attempt < 360 && !stopping; attempt++) {
     try {
       const response = await fetch(healthUrl, { signal: AbortSignal.timeout(1000) })
-      if (response.ok) return true
+      if (response.ok) {
+        console.log('Embedded AI is ready')
+        return true
+      }
     } catch {}
     await new Promise((resolve) => setTimeout(resolve, 500))
   }
   return false
 }
 
-if (!await waitForAi()) console.warn('Embedded AI did not become ready; the API will use its local safety fallback.')
+if (!await waitForAi()) console.warn('Embedded AI did not become ready after 3 minutes; the API will use its local safety fallback.')
 if (!stopping) start(process.execPath, ['server/index.js'])
 
 function stop() {
