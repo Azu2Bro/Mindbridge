@@ -483,7 +483,7 @@ body { font-size: 16px; line-height: 1.55; }
    moderators and administrators, visually distinct from the
    member experience so the two are never confused.
    ============================================================ */
-.staff-page { min-height: 100vh; min-height: 100dvh; position: relative; overflow: hidden; display: flex; flex-direction: column; color: #e7f2ec; background: #0c211a; background-image: radial-gradient(circle at 12% 8%, rgba(60,124,96,.30), transparent 42%), radial-gradient(circle at 88% 90%, rgba(236,129,95,.16), transparent 45%), linear-gradient(155deg, #0b201a, #081814 70%); }
+.staff-page { min-height: 100vh; min-height: 100dvh; position: relative; overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; color: #e7f2ec; background: #0c211a; background-image: radial-gradient(circle at 12% 8%, rgba(60,124,96,.30), transparent 42%), radial-gradient(circle at 88% 90%, rgba(236,129,95,.16), transparent 45%), linear-gradient(155deg, #0b201a, #081814 70%); }
 .staff-backdrop { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .staff-backdrop i { position: absolute; border: 1px solid rgba(255,255,255,.055); border-radius: 50%; animation: staff-drift 26s ease-in-out infinite; }
 .staff-backdrop i:nth-child(1) { width: 560px; height: 560px; top: -210px; left: -160px; }
@@ -506,19 +506,13 @@ body { font-size: 16px; line-height: 1.55; }
 .staff-facts b { display: block; margin-bottom: 4px; color: #fff; font-size: 14.5px; }
 .staff-facts span { color: #a3c0b2; font-size: 13.5px; line-height: 1.6; }
 
-.staff-card { width: 100%; padding: clamp(28px, 4vw, 44px); border: 1px solid rgba(255,255,255,.1); border-radius: 22px; color: var(--ink); background: var(--paper); box-shadow: 0 40px 90px rgba(0,0,0,.45); }
+.staff-card { width: 100%; box-sizing: border-box; padding: clamp(28px, 4vw, 44px); border: 1px solid rgba(255,255,255,.1); border-radius: 22px; color: var(--ink); background: var(--paper); box-shadow: 0 40px 90px rgba(0,0,0,.45); }
 .staff-back { display: inline-flex; align-items: center; gap: 7px; margin-bottom: 22px; color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 650; }
 .staff-back:hover { color: var(--green-2); }
 .staff-card h2 { margin: 0 0 8px; font-size: 28px; letter-spacing: -.8px; }
 .staff-card > p { margin: 0 0 26px; color: var(--muted); font-size: 14px; line-height: 1.6; }
-.staff-demo { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); display: grid; gap: 8px; }
-.staff-demo small { color: var(--muted); font-size: 12px; font-weight: 650; letter-spacing: .3px; }
-.staff-demo button { display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 4px 10px; padding: 11px 13px; border: 1px dashed var(--line); border-radius: 11px; color: var(--ink-2); background: transparent; text-align: left; cursor: pointer; transition: .18s ease; }
-.staff-demo button:hover { border-style: solid; border-color: #8fb9a3; background: var(--green-soft); }
-.staff-demo button svg { color: var(--green-2); }
-.staff-demo button b { font-size: 13.5px; }
-.staff-demo button span { grid-column: 3; justify-self: end; color: var(--muted); font-size: 12.5px; }
-
+.staff-card .auth-submit { margin-top: 8px; margin-bottom: 12px; }
+.staff-card .forgot-link { margin: 0 auto 18px; }
 .auth-staff-link { display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line); color: var(--muted); text-decoration: none; font-size: 12.5px; font-weight: 650; }
 .auth-staff-link:hover { color: var(--green-2); }
 .auth-error-link { display: inline-flex; align-items: center; gap: 5px; margin-top: 7px; color: inherit; font-weight: 800; }
@@ -535,8 +529,6 @@ body { font-size: 16px; line-height: 1.55; }
   .staff-brand { font-size: 18px; }
   .staff-main { padding: 26px 16px 40px; }
   .staff-facts li:nth-child(n+2) { display: none; }
-  .staff-demo button { grid-template-columns: auto 1fr; }
-  .staff-demo button span { grid-column: 1/-1; justify-self: start; }
 }
 
 /* Keep the staff entrance reachable while the rest of the landing nav collapses. */

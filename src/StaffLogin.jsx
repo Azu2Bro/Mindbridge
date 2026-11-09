@@ -1,12 +1,7 @@
 import { useState } from 'react'
-import { ArrowLeft, ArrowRight, Eye, EyeOff, HeartHandshake, LoaderCircle, LockKeyhole, ScrollText, ShieldAlert, ShieldCheck, UserCog } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Eye, EyeOff, HeartHandshake, LoaderCircle, LockKeyhole, ScrollText, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { useAuth } from './AuthContext'
 import GoogleSignInButton from './GoogleSignInButton'
-
-const demoAccounts = [
-  { role: 'Moderator', email: 'moderator@mentalbridge.demo', icon: UserCog },
-  { role: 'Administrator', email: 'admin@mentalbridge.demo', icon: ShieldCheck },
-]
 
 export default function StaffLogin({ theme }) {
   const { staffLogin, staffGoogleLogin } = useAuth()
@@ -91,15 +86,6 @@ export default function StaffLogin({ theme }) {
         </button>
 
         <a className="forgot-link" href="/?mode=forgot">Set up account or reset password</a>
-        <div className="staff-demo">
-          <small>Demo accounts for review</small>
-          {demoAccounts.map(({ role, email, icon: Icon }) => (
-            <button type="button" key={email} onClick={() => setForm({ email, password: 'Demo123!' })}>
-              <Icon size={16} /><b>{role}</b><span>{email}</span>
-            </button>
-          ))}
-        </div>
-
         <div className="auth-security"><ShieldCheck size={16} /> Staff sessions carry elevated permissions. Never share these credentials.</div>
       </form>
     </main>
