@@ -83,7 +83,7 @@ export async function analyzeSupportText(text) {
 
   // Self-hosted open-source inference is the default; never silently send data
   // to a paid provider when this service is unavailable.
-  const provider = process.env.AI_PROVIDER || 'ollama'
+  const provider = process.env.AI_PROVIDER || (process.env.OPENAI_API_KEY ? 'openai' : 'ollama')
   if (provider === 'local') return local
   if (provider === 'ollama') {
     try {
