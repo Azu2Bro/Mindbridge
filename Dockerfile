@@ -7,7 +7,19 @@ ARG VITE_STAFF_AUTH_URL
 ENV VITE_STAFF_AUTH_URL=$VITE_STAFF_AUTH_URL
 RUN npm run build
 
-FROM ghcr.io/ggml-org/llama.cpp:server AS llama
+FROM node:24-bookworm-slim AS llama-build
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential cmake git && \
+    git clone --depth 1 https://github.com/ggml-org/llama.cpp.git /src/llama.cpp && \
+    cmake -S /src/llama.cpp -B /src/llama-build \
+      -DGGML_NATIVE=OFF \
+      -DGGML_OPENMP=ON \
+      -DLLAMA_BUILD_SERVER=ON \
+      -DLLAMA_CURL=OFF && \
+    cmake --build /src/llama-build --config Release --target llama-server -j2 && \
+    apt-get purge -y build-essential cmake git && \
+    apt-get autoremove -y && \
+    rm -rf /var/lib/apt/lists/*
 
 FROM node:24-bookworm-slim
 WORKDIR /app
@@ -26,16 +38,13 @@ RUN apt-get update && \
 COPY --from=build /app/dist ./dist
 COPY server ./server
 COPY scripts/start-production.mjs ./scripts/start-production.mjs
-COPY --from=llama /app /opt/llama
-COPY --from=llama /lib/x86_64-linux-gnu /opt/llama/lib
-COPY --from=llama /usr/lib/x86_64-linux-gnu /opt/llama/usr-lib
+COPY --from=llama-build /src/llama-build/bin/llama-server /opt/llama/llama-server
 
 # Keep a compact open-source model inside the Render image. The model server is
 # bound to loopback, so private support text stays inside this container.
 ENV AI_PROVIDER=llamacpp \
     LLAMACPP_URL=http://127.0.0.1:8080 \
-    LLAMACPP_MODEL=/app/models/smollm2-135m-instruct-q3_k_m.gguf \
-    LD_LIBRARY_PATH=/opt/llama/lib:/opt/llama/usr-lib
+    LLAMACPP_MODEL=/app/models/smollm2-135m-instruct-q3_k_m.gguf
 RUN mkdir -p .data
 # Render and most hosts inject PORT; the server falls back to 3001 locally.
 ENV PORT=3001
