@@ -991,8 +991,8 @@ function MoodView({ moodEntries, setMoodEntries, showToast }) {
     <div className="mood-layout">
       <section className="mood-journal-card">
         <span className="eyebrow">TODAY’S CHECK-IN</span><h2>Meet yourself where you are.</h2><p>No mood is good or bad. This is simply a moment to notice.</p>
-        <div className="mood-picker-large" aria-label="Choose your mood">{moods.map((mood) => <button type="button" key={mood.score} className={selectedMood === mood.score ? 'selected' : ''} aria-pressed={selectedMood === mood.score} onClick={() => setSelectedMood(mood.score)}><span className="mood-choice-face">{mood.face}</span><b>{mood.label}</b>{selectedMood === mood.score && <em>Selected</em>}</button>)}</div>
-        <p className={`mood-selection-status ${selectedMood ? 'visible' : ''}`} role="status">{selectedMood ? `Selected mood: ${moods[selectedMood - 1].label}` : 'Select one mood to continue'}</p>
+        <div className="mood-picker-large" aria-label="Choose your mood">{moods.map((mood) => <button type="button" key={mood.score} className={selectedMood === mood.score ? 'selected' : ''} aria-pressed={selectedMood === mood.score} onClick={() => setSelectedMood(mood.score)}><span className="mood-choice-face">{mood.face}</span><b>{mood.label}</b></button>)}</div>
+        <p className={`mood-selection-status ${selectedMood ? 'visible' : ''}`} role="status">{selectedMood ? `Current mood: ${moods[selectedMood - 1].label}` : 'Choose a mood to continue'}</p>
         <label className="journal-field"><span>Anything you want to remember about today? <em>Optional</em></span><textarea value={journal} onChange={(e) => setJournal(e.target.value)} placeholder="A few words is enough…" /></label>
         <button className="button button-dark" disabled={!selectedMood || saving} onClick={saveEntry}>{saving ? <><LoaderCircle className="spin" size={16} /> Saving…</> : <>Save today’s check-in <CheckCircle2 size={16} /></>}</button>
       </section>
