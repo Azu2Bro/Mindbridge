@@ -73,15 +73,12 @@ services:
           envVarKey: RENDER_EXTERNAL_URL
 
       - key: AI_PROVIDER
-        value: llamacpp
+        value: local
       # This deployment is a prototype, so its varied sample peer profiles are
       # returned by the real API and clearly labeled in the matching UI.
       - key: ALLOW_DEMO_MATCHES
         value: "true"
-      # A compact open-source model runs through llama.cpp in this container, so
-      # peer-support text never leaves the MentalBridge service for analysis.
-      - key: LLAMACPP_URL
-        value: http://127.0.0.1:8080
+      # Production uses the deterministic local analyzer on the free instance.
       - key: INITIAL_ADMIN_EMAIL
         sync: false
       - key: INITIAL_VOLUNTEER_EMAILS
