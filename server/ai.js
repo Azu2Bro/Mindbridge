@@ -42,10 +42,14 @@ const analysisSchema = {
   },
 }
 
-function normalizeModelAnalysis(value) {
+function normalizeModelAnalysis(value, allowedTags = null) {
   if (!value || typeof value.summary !== 'string' || !Array.isArray(value.tags) || !Array.isArray(value.priorities)) throw new Error('Model returned an incomplete analysis')
-  const tags = value.tags.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim().slice(0, 60)).filter((item) => item.length >= 2).slice(0, 4)
-  const priorities = value.priorities.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim().slice(0, 60)).filter((item) => item.length >= 2).slice(0, 2)
+  const rawTags = value.tags.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim().slice(0, 60)).filter((item) => item.length >= 2).slice(0, 4)
+  const rawPriorities = value.priorities.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim().slice(0, 60)).filter((item) => item.length >= 2).slice(0, 2)
+  const tags = allowedTags ? rawTags.filter((item) => allowedTags.includes(item)) : rawTags
+  const priorities = allowedTags ? rawPriorities.filter((item) => allowedTags.includes(item)) : rawPriorities
+  if (!tags.length && allowedTags && rawTags.length) tags.push(...allowedTags.slice(0, 4))
+  if (!priorities.length && allowedTags && rawPriorities.length) priorities.push(...tags.slice(0, 2))
   if (!tags.length || !priorities.length || value.summary.trim().length < 20) throw new Error('Model returned an unusable analysis')
   const supportedPriorities = priorities.filter((item) => tags.includes(item))
   return { summary: value.summary.trim().slice(0, 1200), tags, priorities: supportedPriorities.length ? supportedPriorities : tags.slice(0, 2) }
@@ -112,7 +116,7 @@ async function analyzeWithLlamaCpp(text, local) {
       if (!response.ok) throw new Error(`llama.cpp returned ${response.status}`)
       const payload = await response.json()
       const content = payload.choices?.[0]?.message?.content || payload.content
-      return normalizeModelAnalysis(parseModelJson(content))
+      return normalizeModelAnalysis(parseModelJson(content), grounded.tags)
     } catch (error) {
       lastError = error
       if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 1500))
@@ -151,16 +155,18 @@ async function analyzeWithHuggingFace(text, local) {
   if (!process.env.HF_API_TOKEN) throw new Error('Hugging Face token is not configured')
   const grounded = groundedAnalysis(local)
   let lastError
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      const response = await fetch('https://router.huggingface.co/v1/chat/completions', {
+  const models = [process.env.HF_MODEL || 'meta-llama/Llama-3.1-8B-Instruct', 'Qwen/Qwen3-0.6B']
+  for (const model of [...new Set(models)]) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const response = await fetch('https://router.huggingface.co/v1/chat/completions', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${process.env.HF_API_TOKEN}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: process.env.HF_MODEL || 'meta-llama/Llama-3.1-8B-Instruct',
+          model,
           messages: [
             { role: 'system', content: `${analysisInstruction(grounded.tags)} Return valid JSON only.` },
             { role: 'user', content: text },
@@ -178,10 +184,11 @@ async function analyzeWithHuggingFace(text, local) {
       const payload = await response.json()
       const rawContent = payload.choices?.[0]?.message?.content || payload.choices?.[0]?.text
       const content = Array.isArray(rawContent) ? rawContent.map((part) => part.text || '').join('') : rawContent
-      return normalizeModelAnalysis(parseModelJson(content))
-    } catch (error) {
-      lastError = error
-      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 750))
+        return normalizeModelAnalysis(parseModelJson(content), grounded.tags)
+      } catch (error) {
+        lastError = error
+        if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 750))
+      }
     }
   }
   throw lastError
