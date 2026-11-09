@@ -16,7 +16,7 @@ export function verifyToken(token) {
 
 export function publicUser(user) {
   if (!user) return null
-  const { passwordHash, ...safe } = user
+  const { passwordHash, googleSub, ...safe } = user
   return safe
 }
 

@@ -20,6 +20,7 @@ import { provisionAccounts } from './provision-accounts.js'
 import { publishedResources } from './resources.js'
 import { createDemoMatchingVolunteers } from './seed.js'
 import { appBaseUrl, sendPasswordResetEmail, sendVerificationEmail } from './email.js'
+import { googleIdentityEnabled, verifyGoogleCredential } from './google-auth.js'
 
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
 const id = (prefix) => `${prefix}-${randomUUID()}`
@@ -144,7 +145,7 @@ function activeVolunteerAssignments(requests = []) {
   return counts
 }
 
-export async function createApp({ store: suppliedStore } = {}) {
+export async function createApp({ store: suppliedStore, googleVerifier = verifyGoogleCredential } = {}) {
   let dataStore = suppliedStore
   let storageMode = suppliedStore ? 'test' : 'json'
   if (!dataStore && process.env.MONGODB_URI) {
@@ -173,6 +174,7 @@ export async function createApp({ store: suppliedStore } = {}) {
 
   app.use(helmet({
     crossOriginResourcePolicy: { policy: 'cross-origin' },
+    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
     // Helmet's default policy adds upgrade-insecure-requests, which breaks the plain-http
     // LAN URL used to demo this on a phone, so the directives are spelled out instead.
     contentSecurityPolicy: {
@@ -182,11 +184,12 @@ export async function createApp({ store: suppliedStore } = {}) {
         baseUri: ["'self'"],
         objectSrc: ["'none'"],
         frameAncestors: ["'self'"],
-        scriptSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        scriptSrc: ["'self'", 'https://accounts.google.com/gsi/client'],
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://accounts.google.com/gsi/style'],
         fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'],
         imgSrc: ["'self'", 'data:', 'blob:'],
-        connectSrc: ["'self'", 'ws:', 'wss:', staffAuthOrigin].filter(Boolean),
+        connectSrc: ["'self'", 'ws:', 'wss:', staffAuthOrigin, 'https://accounts.google.com/gsi/'].filter(Boolean),
+        frameSrc: ['https://accounts.google.com/gsi/'],
         manifestSrc: ["'self'"],
         formAction: ["'self'"],
       },
@@ -199,6 +202,7 @@ export async function createApp({ store: suppliedStore } = {}) {
   app.use('/api/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 80, standardHeaders: true, legacyHeaders: false }))
 
   app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'mentalbridge-api', storage: app.locals.storageMode, ai: process.env.AI_PROVIDER || 'ollama', timestamp: now() }))
+  app.get('/api/auth/google/config', (req, res) => res.json({ enabled: googleIdentityEnabled(), clientId: process.env.GOOGLE_CLIENT_ID || null }))
 
   app.post('/api/auth/register', asyncRoute(async (req, res) => {
     const body = parse(z.object({
@@ -241,7 +245,7 @@ export async function createApp({ store: suppliedStore } = {}) {
   async function authenticate(req, res) {
     const body = parse(credentialsSchema, req.body)
     const user = dataStore.data.users.find((item) => item.email === body.email)
-    if (!user || user.status !== 'active' || !(await bcrypt.compare(body.password, user.passwordHash))) {
+    if (!user || user.status !== 'active' || !user.passwordHash || !(await bcrypt.compare(body.password, user.passwordHash))) {
       res.status(401).json({ error: 'Email or password is incorrect' })
       return null
     }
@@ -258,6 +262,57 @@ export async function createApp({ store: suppliedStore } = {}) {
     if (!user) return
     if (staffRoles.includes(user.role)) return res.status(403).json({ error: 'This is a staff account. Sign in from the staff portal at /staff.', staffPortal: true })
     res.json({ token: signToken(user), user: publicUser(user) })
+  }))
+
+  app.post('/api/auth/google', asyncRoute(async (req, res) => {
+    const identity = await googleVerifier(req.body?.credential)
+    const result = await dataStore.mutate((data) => {
+      let user = data.users.find((item) => item.googleSub === identity.sub)
+      const emailUser = data.users.find((item) => item.email === identity.email)
+      if (user && emailUser && user.id !== emailUser.id) {
+        const error = new Error('This Google account conflicts with an existing account email')
+        error.status = 409
+        throw error
+      }
+      user ||= emailUser
+      let created = false
+
+      if (user) {
+        if (user.status !== 'active') {
+          const error = new Error('This account is unavailable')
+          error.status = 403
+          throw error
+        }
+        if (staffRoles.includes(user.role)) {
+          const error = new Error('This is a staff account. Sign in from the staff portal at /staff.')
+          error.status = 403
+          error.staffPortal = true
+          throw error
+        }
+        if (user.googleSub && user.googleSub !== identity.sub) {
+          const error = new Error('This email is linked to a different Google account')
+          error.status = 409
+          throw error
+        }
+      } else {
+        user = {
+          id: id('user'), email: identity.email, displayName: identity.name.length >= 2 ? identity.name : 'Google Member',
+          anonymousName: `GentleRiver${Math.floor(Math.random() * 900 + 100)}`,
+          role: 'user', status: 'active', privacy: { showOnline: true, allowReminders: true }, bookmarks: [], postBookmarks: [],
+          emailVerified: true, createdAt: now(), avatarColor: '#e5aa82',
+        }
+        data.users.push(user)
+        created = true
+      }
+
+      user.googleSub = identity.sub
+      user.emailVerified = true
+      delete user.accountSetupRequired
+      data.emailVerifications = data.emailVerifications.filter((entry) => entry.userId !== user.id)
+      data.auditLogs.push({ id: id('audit'), actorId: user.id, action: created ? 'account.google_registered' : 'account.google_login', createdAt: now() })
+      return { user, created }
+    })
+    res.status(result.created ? 201 : 200).json({ token: signToken(result.user), user: publicUser(result.user), newAccount: result.created })
   }))
 
   app.post('/api/auth/verify-email', asyncRoute(async (req, res) => {
@@ -798,7 +853,10 @@ export async function createApp({ store: suppliedStore } = {}) {
   app.use((req, res) => res.status(404).json({ error: 'Endpoint not found' }))
   app.use((error, req, res, next) => {
     console.error(error)
-    res.status(error.status || 500).json({ error: error.status ? error.message : 'Something went wrong on the server' })
+    res.status(error.status || 500).json({
+      error: error.status ? error.message : 'Something went wrong on the server',
+      ...(error.staffPortal ? { staffPortal: true } : {}),
+    })
   })
   return app
 }

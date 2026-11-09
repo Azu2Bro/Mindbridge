@@ -28,13 +28,13 @@ Demo accounts all use the password `Demo123!`:
 
 | Who | Where | Endpoint |
 |---|---|---|
-| Members and peer volunteers | **Login** / **Sign up** in the landing navbar | `POST /api/auth/login` |
-| Moderators and administrators | `/staff` directly | `POST http://localhost:3002/api/auth/staff/login` |
+| Members and peer volunteers | **Login** / **Sign up** in the landing navbar | `POST /api/auth/login` or `POST /api/auth/google` |
+| Moderators and administrators | `/staff` directly | `POST http://localhost:3002/api/auth/staff/login` or `POST http://localhost:3002/api/auth/staff/google` |
 
 The two portals are enforced by separate Node processes, not just separate pages. The member API never accepts a staff login request; the staff-authentication service only admits moderator and administrator roles. It has its own tighter rate limit and writes every accepted and refused attempt to the shared audit log.
 `/admin` and `/moderator` both open the same staff portal.
 
-New registrations must verify their email before their first login. Demo accounts are already verified.
+Email/password registrations must verify their email before their first login. Google verifies the email during Google sign-in. Demo accounts are already verified.
 
 ## Showing the project on a phone and on a PC
 
@@ -74,6 +74,7 @@ DATA_FILE=.data/mentalbridge.json
 CLIENT_ORIGIN=http://localhost:5173
 VITE_STAFF_AUTH_URL=http://127.0.0.1:3002
 STAFF_AUTH_URL=http://127.0.0.1:3002
+GOOGLE_CLIENT_ID=
 MONGODB_URI=
 MONGODB_DATABASE=mentalbridge
 APP_URL=http://localhost:5173
@@ -103,6 +104,7 @@ In development, one-time verification and password-reset tokens can be completed
 ### Accounts and privacy
 
 - Registration with mandatory expiring email verification and bcrypt password hashing
+- Google Identity Services sign-up/sign-in with server-verified ID tokens; staff Google sign-in only admits existing moderator and administrator accounts
 - Separate member/volunteer and moderator/administrator login portals, enforced by two distinct
   server endpoints with their own rate limits and audit logging
 - Seven-day signed JWT sessions
@@ -161,10 +163,11 @@ The member Express server serves the compiled React application from `dist/` whe
 
 A multi-stage `Dockerfile` and `render.yaml` blueprint deploy two Render web services: `mentalbridge` for the member app/API and `mentalbridge-staff-auth` for staff authentication.
 
-Two variables are mandatory when `NODE_ENV=production`, or the server throws on startup:
+Core production variables are configured through the Render service environment:
 
 - `JWT_SECRET` — set the identical secret value on both Render services
 - `SMTP_HOST` — email verification is mandatory for new signups, so a real sender is required
+- `GOOGLE_CLIENT_ID` — optional OAuth 2.0 Web client ID. Add `https://mentalbridge.onrender.com` as an Authorized JavaScript origin in Google Cloud. The Google button stays hidden until this is configured.
 
 `MONGODB_URI` should point at the same MongoDB Atlas database on both services. Without it the member service falls back to a JSON file, and on a host with no persistent disk that file is wiped on every deploy; the staff service intentionally refuses to start in production without MongoDB. When Atlas is used, allow
 `0.0.0.0/0` in its Network Access list, because free hosts do not provide a static outbound IP.

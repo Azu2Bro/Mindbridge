@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { appBaseUrl } from '../email.js'
 import { analyzeSupportText, rankVolunteers } from '../ai.js'
 import { provisionAccounts } from '../provision-accounts.js'
+import { verifyGoogleCredential } from '../google-auth.js'
 
 function setEnv(t, key, value) {
   const previous = process.env[key]
@@ -23,6 +24,23 @@ test('email URLs use trusted development origins and reject production localhost
   process.env.APP_URL = ''
   setEnv(t, 'RENDER_EXTERNAL_URL', 'https://example.onrender.com')
   assert.equal(appBaseUrl(), 'https://example.onrender.com')
+})
+
+test('Google identity verification requires the configured audience and a verified email', async () => {
+  let received
+  const client = {
+    async verifyIdToken(options) {
+      received = options
+      return { getPayload: () => ({ sub: 'google-123', email: 'Member@Example.com', email_verified: true, name: 'Test Member' }) }
+    },
+  }
+  const credential = 'x'.repeat(200)
+  const identity = await verifyGoogleCredential(credential, { client, clientId: 'web-client.apps.googleusercontent.com' })
+  assert.deepEqual(received, { idToken: credential, audience: 'web-client.apps.googleusercontent.com' })
+  assert.deepEqual(identity, { sub: 'google-123', email: 'member@example.com', name: 'Test Member' })
+
+  const unverifiedClient = { verifyIdToken: async () => ({ getPayload: () => ({ sub: 'google-456', email: 'member@example.com', email_verified: false }) }) }
+  await assert.rejects(() => verifyGoogleCredential(credential, { client: unverifiedClient, clientId: 'client-id' }), /verified email/)
 })
 
 test('self-hosted summaries drive matching; malformed AI output falls back locally', async (t) => {

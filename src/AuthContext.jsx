@@ -27,8 +27,20 @@ export function AuthProvider({ children }) {
       setUser(result.user)
       return result.user
     },
+    async googleLogin(credential) {
+      const result = await api.googleLogin(credential)
+      session.setToken(result.token)
+      setUser(result.user)
+      return result.user
+    },
     async staffLogin(credentials) {
       const result = await api.staffLogin(credentials)
+      session.setToken(result.token)
+      setUser(result.user)
+      return result.user
+    },
+    async staffGoogleLogin(credential) {
+      const result = await api.staffGoogleLogin(credential)
       session.setToken(result.token)
       setUser(result.user)
       return result.user

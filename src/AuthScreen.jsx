@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, Check, Eye, EyeOff, HeartHandshake, LoaderCircle, LockKeyhole, MailCheck, ShieldCheck, X } from 'lucide-react'
 import { useAuth } from './AuthContext'
 import { api } from './api'
+import GoogleSignInButton from './GoogleSignInButton'
 
 export default function AuthScreen({ initialMode = 'login', onClose }) {
-  const { login, register } = useAuth()
+  const { login, register, googleLogin } = useAuth()
   const [params] = useState(() => new URLSearchParams(window.location.search))
   const verificationStarted = useRef(false)
   const clearTokens = () => { const url = new URL(window.location.href); url.searchParams.delete('reset'); url.searchParams.delete('verify'); window.history.replaceState({}, '', url.pathname + url.search + url.hash) }
@@ -83,6 +84,13 @@ export default function AuthScreen({ initialMode = 'login', onClose }) {
     finally { setLoading(false) }
   }
 
+  const handleGoogleCredential = async (credential) => {
+    setLoading(true); setError(''); setNotice(''); setStaffHint(false)
+    try { await googleLogin(credential); onClose?.() }
+    catch (requestError) { setError(requestError.message); setStaffHint(Boolean(requestError.details?.staffPortal)) }
+    finally { setLoading(false) }
+  }
+
   const title = mode === 'login' ? 'Welcome back' : mode === 'register' ? 'Create your private space' : mode === 'resend' ? 'Resend verification email' : mode === 'forgot' ? 'Reset your password' : mode === 'reset' ? 'Choose a new password' : mode === 'pending' ? 'Check your inbox' : 'Email verification'
 
   return <div className="auth-overlay" role="presentation">
@@ -102,6 +110,7 @@ export default function AuthScreen({ initialMode = 'login', onClose }) {
         {mode === 'forgot' && <p>Enter your account email to receive a secure reset link.</p>}
         {mode === 'reset' && <p>Use a strong password you have not used for this account before.</p>}
         {['pending', 'verified', 'verifying'].includes(mode) ? <div className="verification-state"><span><MailCheck size={30} /></span><p>{mode === 'verifying' ? 'Verifying your email…' : notice || 'Open the link sent to your email address.'}</p>{error && <div className="auth-error" role="alert">{error}</div>}{mode === 'pending' && <><small>Sent for: {form.email}</small><button type="button" className="button button-secondary" disabled={loading} onClick={resend}>Resend verification email</button>{verificationToken && <button type="button" className="button button-dark" disabled={loading} onClick={verifyDevelopmentAccount}>Verify development account</button>}</>}{mode === 'verified' && error && <button type="button" className="button button-secondary" onClick={() => changeMode('resend')}>Request a new verification link</button>}{mode === 'verified' && !error && <button type="button" className="button button-dark" onClick={() => changeMode('login')}>Continue to sign in <ArrowRight size={16} /></button>}</div> : <>
+          {['login', 'register'].includes(mode) && <><GoogleSignInButton onCredential={handleGoogleCredential} disabled={loading} /><div className="auth-divider"><span>or use email</span></div></>}
           {mode === 'register' && <div className="auth-field-row"><label><span>Your name</span><input required minLength={2} maxLength={70} value={form.displayName} onChange={update('displayName')} placeholder="Your private name" /></label><label><span>Anonymous name <em>(optional)</em></span><input minLength={3} maxLength={40} value={form.anonymousName} onChange={update('anonymousName')} placeholder="QuietRiver" /><small className="field-hint">Bengali and English names are supported. Leave blank for an automatic private name.</small></label></div>}
           {mode !== 'reset' && <label className="auth-field"><span>Email address</span><input type="email" required value={form.email} onChange={update('email')} placeholder="you@example.com" autoComplete="email" /></label>}
           {!['forgot', 'resend'].includes(mode) && <label className="auth-field"><span>{mode === 'reset' ? 'New password' : 'Password'}</span><div><input type={showPassword ? 'text' : 'password'} required minLength={8} value={form.password} onChange={update('password')} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} /><button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div></label>}

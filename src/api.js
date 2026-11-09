@@ -34,7 +34,7 @@ async function request(path, options = {}, apiBase = '/api') {
   }
   const data = await response.json().catch(() => ({}))
   if (!response.ok) {
-    if (response.status === 401 && path !== '/auth/login') {
+    if (response.status === 401 && !['/auth/login', '/auth/google', '/auth/staff/login', '/auth/staff/google'].includes(path)) {
       session.setToken(null)
       window.dispatchEvent(new CustomEvent('mentalbridge:session-expired'))
     }
@@ -49,10 +49,16 @@ const json = (method, body) => ({ method, body: JSON.stringify(body) })
 
 export const api = {
   health: () => request('/health'),
+  googleConfig: () => request('/auth/google/config'),
   login: (credentials) => request('/auth/login', json('POST', credentials)),
+  googleLogin: (credential) => request('/auth/google', json('POST', { credential })),
   staffLogin: (credentials) => {
     if (!staffApiBase) return Promise.reject(new Error('The staff authentication server is not configured.'))
     return request('/auth/staff/login', json('POST', credentials), staffApiBase)
+  },
+  staffGoogleLogin: (credential) => {
+    if (!staffApiBase) return Promise.reject(new Error('The staff authentication server is not configured.'))
+    return request('/auth/staff/google', json('POST', { credential }), staffApiBase)
   },
   register: (details) => request('/auth/register', json('POST', details)),
   verifyEmail: (token) => request('/auth/verify-email', json('POST', { token })),

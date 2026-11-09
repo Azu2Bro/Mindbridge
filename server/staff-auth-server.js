@@ -11,6 +11,7 @@ import { z } from 'zod'
 import { MongoStore } from './mongo-store.js'
 import { store as defaultStore } from './store.js'
 import { publicUser, signToken } from './auth.js'
+import { verifyGoogleCredential } from './google-auth.js'
 
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
 const now = () => new Date().toISOString()
@@ -51,7 +52,7 @@ async function writeAuditLog(dataStore, entry) {
   return dataStore.mutate((data) => data.auditLogs.push(entry))
 }
 
-export async function createStaffAuthApp({ store } = {}) {
+export async function createStaffAuthApp({ store, googleVerifier = verifyGoogleCredential } = {}) {
   const { dataStore, storageMode } = await openStore(store)
   const app = express()
   app.locals.store = dataStore
@@ -67,13 +68,25 @@ export async function createStaffAuthApp({ store } = {}) {
   app.post('/api/auth/staff/login', asyncRoute(async (req, res) => {
     const body = credentialsSchema.parse(req.body)
     const user = await findUser(dataStore, body.email)
-    if (!user || user.status !== 'active' || !(await bcrypt.compare(body.password, user.passwordHash))) return res.status(401).json({ error: 'Email or password is incorrect' })
+    if (!user || user.status !== 'active' || !user.passwordHash || !(await bcrypt.compare(body.password, user.passwordHash))) return res.status(401).json({ error: 'Email or password is incorrect' })
     if (!user.emailVerified) return res.status(403).json({ error: 'Verify your email before signing in.', verificationRequired: true })
     if (!staffRoles.includes(user.role)) {
       await writeAuditLog(dataStore, { id: id('audit'), actorId: user.id, action: 'staff.login.denied', metadata: { role: user.role }, createdAt: now() })
       return res.status(403).json({ error: 'This account does not have moderator or administrator access.' })
     }
     await writeAuditLog(dataStore, { id: id('audit'), actorId: user.id, action: 'staff.login', metadata: { role: user.role }, createdAt: now() })
+    res.json({ token: signToken(user), user: publicUser(user) })
+  }))
+
+  app.post('/api/auth/staff/google', asyncRoute(async (req, res) => {
+    const identity = await googleVerifier(req.body?.credential)
+    const user = await findUser(dataStore, identity.email)
+    if (!user || user.status !== 'active' || !user.emailVerified) return res.status(403).json({ error: 'No active, verified staff account matches this Google email.' })
+    if (!staffRoles.includes(user.role)) {
+      await writeAuditLog(dataStore, { id: id('audit'), actorId: user.id, action: 'staff.google_login.denied', metadata: { role: user.role }, createdAt: now() })
+      return res.status(403).json({ error: 'This account does not have moderator or administrator access.' })
+    }
+    await writeAuditLog(dataStore, { id: id('audit'), actorId: user.id, action: 'staff.google_login', metadata: { role: user.role }, createdAt: now() })
     res.json({ token: signToken(user), user: publicUser(user) })
   }))
 

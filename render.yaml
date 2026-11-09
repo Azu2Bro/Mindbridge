@@ -24,6 +24,11 @@ services:
       - key: JWT_SECRET
         sync: false
 
+      # OAuth 2.0 Web client ID from Google Cloud. This value is public but is
+      # entered in the dashboard so each deployment can use its own client.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+
       # MongoDB Atlas connection string. Required, or the app falls back to a
       # JSON file that resets on every deploy.
       - key: MONGODB_URI
@@ -101,6 +106,13 @@ services:
       # Must exactly match the JWT_SECRET configured for mentalbridge.
       - key: JWT_SECRET
         sync: false
+
+      # Use the exact same Google Web client as the browser and member API.
+      - key: GOOGLE_CLIENT_ID
+        fromService:
+          type: web
+          name: mentalbridge
+          envVarKey: GOOGLE_CLIENT_ID
 
       # Both services authenticate against the same persistent user records.
       - key: MONGODB_URI
