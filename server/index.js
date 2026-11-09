@@ -205,7 +205,7 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
   app.use(express.json({ limit: '512kb' }))
   app.use('/api/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 80, standardHeaders: true, legacyHeaders: false }))
 
-  app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'mentalbridge-api', storage: app.locals.storageMode, ai: process.env.AI_PROVIDER || 'ollama', timestamp: now() }))
+  app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'mentalbridge-api', storage: app.locals.storageMode, ai: process.env.NODE_ENV === 'production' ? 'groq' : (process.env.AI_PROVIDER || 'ollama'), timestamp: now() }))
   app.get('/api/auth/google/config', (req, res) => res.json({ enabled: googleIdentityEnabled(), clientId: process.env.GOOGLE_CLIENT_ID || null }))
   app.post('/api/volunteer-applications', asyncRoute(async (req, res) => {
     const body = parse(z.object({
