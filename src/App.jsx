@@ -168,7 +168,6 @@ function App() {
   const [accountLinkOpen, setAccountLinkOpen] = useState(() => { const params = new URLSearchParams(window.location.search); return params.has('verify') || params.has('reset') || params.get('mode') === 'forgot' })
   const [theme, setTheme] = useStoredState('mentalbridge-theme', window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [openVolunteerApplication, setOpenVolunteerApplication] = useState(false)
   const [supportOpen, setSupportOpen] = useState(() => new URLSearchParams(window.location.search).get('support') === 'open')
   const [profileOpen, setProfileOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
@@ -249,7 +248,7 @@ function App() {
 
   const navigate = (id, options = {}) => {
     setActive(id)
-    setOpenVolunteerApplication(id === 'settings' && options.volunteer === true)
+    if (options.volunteer) id = 'volunteer-apply'
     setSidebarOpen(false)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -264,6 +263,7 @@ function App() {
     resources: ['Resource library', 'Practical tools for wherever you are today.'],
     admin: ['Care operations', 'Safety, coordination, and community health at a glance.'],
     settings: ['Account & privacy', 'Control your identity, preferences, and availability.'],
+    'volunteer-apply': ['Volunteer application', 'Apply to support members as a peer volunteer.'],
     help: ['Help center', 'Quick answers and guidance for using MentalBridge.'],
     safety: ['Safety & privacy', 'How MentalBridge protects your space and responds to concerns.'],
   }
@@ -277,7 +277,8 @@ function App() {
     volunteers: <VolunteerDirectory onNavigate={navigate} />,
     resources: <ResourcesView showToast={showToast} user={user} />,
     admin: <AdminView showToast={showToast} user={user} />,
-    settings: <SettingsView user={user} refreshUser={refreshUser} showToast={showToast} openVolunteerApplication={openVolunteerApplication} />,
+    settings: <SettingsView user={user} refreshUser={refreshUser} showToast={showToast} />,
+    'volunteer-apply': <VolunteerApplicationView user={user} showToast={showToast} />,
     help: <HelpView onNavigate={navigate} user={user} />,
     safety: <SafetyView />,
   }[active]
@@ -379,7 +380,7 @@ function Sidebar({ active, navigate, open, onClose, user, counts }) {
               <Icon size={19} strokeWidth={1.9} /><span>{label}</span>{counts[id] > 0 && <em aria-label={`${label} count`}>{counts[id]}</em>}
             </button>
           ))}
-          {user.role === 'user' && <button className="nav-item volunteer-apply-nav" onClick={() => navigate('settings', { volunteer: true })}><HeartHandshake size={19} strokeWidth={1.9} /><span>Become a volunteer</span></button>}
+          {user.role === 'user' && <button className="nav-item volunteer-apply-nav" onClick={() => navigate('volunteer-apply', { volunteer: true })}><HeartHandshake size={19} strokeWidth={1.9} /><span>Become a volunteer</span></button>}
         </nav>
         <div className="sidebar-spacer" />
         {user.role === 'user' && <div className="supporter-card">
@@ -1195,12 +1196,28 @@ function StatCard({ icon: Icon, label, value, trend, color }) {
   return <div className="stat-card"><span className={`status-icon ${color}`}><Icon size={20} /></span><div><small>{label}</small><b>{value}</b><em>{trend}</em></div></div>
 }
 
-function SettingsView({ user, refreshUser, showToast, openVolunteerApplication = false }) {
-  const [volunteerApplicationOpen, setVolunteerApplicationOpen] = useState(openVolunteerApplication)
-  const [volunteerApplication, setVolunteerApplication] = useState({ experience: '', motivation: '' })
-  useEffect(() => {
-    if (openVolunteerApplication) setVolunteerApplicationOpen(true)
-  }, [openVolunteerApplication])
+function VolunteerApplicationView({ user, showToast }) {
+  const [form, setForm] = useState({ experience: '', motivation: '' })
+  const [submitted, setSubmitted] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const submit = async (event) => {
+    event.preventDefault()
+    setSaving(true)
+    try {
+      await api.applyVolunteerAsMember(form)
+      setSubmitted(true)
+      showToast('Volunteer application sent for moderator review')
+    } catch (requestError) {
+      showToast(requestError.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+  if (submitted) return <section className="settings-card volunteer-application-page"><div className="section-heading"><div><span className="eyebrow">PEER SUPPORT</span><h2>Application submitted</h2></div></div><p>Thank you, {user.displayName}. A moderator will review your application and notify you of the decision.</p></section>
+  return <form className="settings-card volunteer-application-page" onSubmit={submit}><div className="section-heading"><div><span className="eyebrow">PEER SUPPORT</span><h2>Become a volunteer</h2></div></div><p>Tell us about your experience and how you would support members safely. Approval is required before volunteer access is enabled.</p><label className="auth-field"><span>Relevant experience</span><textarea className="volunteer-application-textarea" required minLength={20} value={form.experience} onChange={(event) => setForm({ ...form, experience: event.target.value })} /></label><label className="auth-field"><span>Why would you like to volunteer?</span><textarea className="volunteer-application-textarea" required minLength={20} value={form.motivation} onChange={(event) => setForm({ ...form, motivation: event.target.value })} /></label><button className="button button-dark" disabled={saving}>{saving ? 'Submitting…' : 'Submit application'}</button></form>
+}
+
+function SettingsView({ user, refreshUser, showToast }) {
   const [form, setForm] = useState({
     displayName: user.displayName || '', anonymousName: user.anonymousName || '',
     showOnline: user.privacy?.showOnline ?? true, allowReminders: user.privacy?.allowReminders ?? true,
@@ -1218,8 +1235,7 @@ function SettingsView({ user, refreshUser, showToast, openVolunteerApplication =
     } catch (requestError) { setError(requestError.message) }
     finally { setSaving(false) }
   }
-  const apply = async () => { try { await api.applyVolunteerAsMember(volunteerApplication); setVolunteerApplicationOpen(false); setVolunteerApplication({ experience: '', motivation: '' }); showToast('Volunteer application sent for moderator review') } catch (requestError) { showToast(requestError.message) } }
-  return <div className="settings-layout"><form className="settings-card" onSubmit={save}><div className="section-heading"><div><span className="eyebrow">PROFILE</span><h2>Your account</h2></div><span className="safe-label"><LockKeyhole size={14} /> Private account information</span></div>{error && <InlineError message={error} />}<ProfilePicturePicker value={form.avatarUrl} onChange={(avatarUrl) => setForm({ ...form, avatarUrl })} /><div className="settings-grid"><label><span>Full name</span><input required minLength={2} value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} /></label><label><span>Anonymous community name</span><input required minLength={3} value={form.anonymousName} onChange={(event) => setForm({ ...form, anonymousName: event.target.value })} /></label><label className="full"><span>Email address</span><input value={user.email} disabled /><small>Email changes require administrator verification.</small></label>{user.role === 'volunteer' && <><label><span>Availability</span><select value={form.availability} onChange={(event) => setForm({ ...form, availability: event.target.value })}><option value="available">Available</option><option value="limited">Limited</option><option value="unavailable">Unavailable</option></select></label><label><span>Expertise, separated by commas</span><input value={form.expertise} onChange={(event) => setForm({ ...form, expertise: event.target.value })} /></label><label className="full"><span>Supporter introduction</span>  <textarea value={form.bio} onChange={(event) => setForm({ ...form, bio: event.target.value })} maxLength={500} /></label></>}</div><div className="privacy-settings"><h3>Privacy preferences</h3><label><input type="checkbox" checked={form.showOnline} onChange={(event) => setForm({ ...form, showOnline: event.target.checked })} /><span><b>Show online availability</b><small>Let your current peer connection know when you are available.</small></span></label><label><input type="checkbox" checked={form.allowReminders} onChange={(event) => setForm({ ...form, allowReminders: event.target.checked })} /><span><b>Mood check-in reminders</b><small>Allow MentalBridge to display reminder notifications.</small></span></label></div><button className="button button-dark" disabled={saving}>{saving ? <><LoaderCircle className="spin" size={16} /> Saving…</> : <><Save size={16} /> Save settings</>}</button></form>{user.role === 'user' && <section className="settings-card"><div className="section-heading"><div><span className="eyebrow">PEER SUPPORT</span><h2>Become a volunteer</h2></div></div><p>Share your experience and let moderators review your application. Approval is required before volunteer access is enabled.</p>{volunteerApplicationOpen ? <><label className="auth-field"><span>Relevant experience</span><textarea className="volunteer-application-textarea" minLength={20} value={volunteerApplication.experience} onChange={(event) => setVolunteerApplication({ ...volunteerApplication, experience: event.target.value })} /></label><label className="auth-field"><span>Why would you like to volunteer?</span><textarea className="volunteer-application-textarea" minLength={20} value={volunteerApplication.motivation} onChange={(event) => setVolunteerApplication({ ...volunteerApplication, motivation: event.target.value })} /></label><button type="button" className="button button-dark" onClick={apply}>Submit application</button></> : <button type="button" className="button button-secondary" onClick={() => setVolunteerApplicationOpen(true)}>Apply to become a volunteer</button>}</section>}<aside className="settings-aside"><ShieldCheck size={28} /><h3>Your identity stays protected</h3><p>Community posts display your anonymous name. Your full name and email are not shown publicly.</p><div><b>Role</b><span>{user.role}</span></div><div><b>Account status</b><span>{user.status}</span></div></aside></div>
+  return <div className="settings-layout"><form className="settings-card" onSubmit={save}><div className="section-heading"><div><span className="eyebrow">PROFILE</span><h2>Your account</h2></div><span className="safe-label"><LockKeyhole size={14} /> Private account information</span></div>{error && <InlineError message={error} />}<ProfilePicturePicker value={form.avatarUrl} onChange={(avatarUrl) => setForm({ ...form, avatarUrl })} /><div className="settings-grid"><label><span>Full name</span><input required minLength={2} value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} /></label><label><span>Anonymous community name</span><input required minLength={3} value={form.anonymousName} onChange={(event) => setForm({ ...form, anonymousName: event.target.value })} /></label><label className="full"><span>Email address</span><input value={user.email} disabled /><small>Email changes require administrator verification.</small></label>{user.role === 'volunteer' && <><label><span>Availability</span><select value={form.availability} onChange={(event) => setForm({ ...form, availability: event.target.value })}><option value="available">Available</option><option value="limited">Limited</option><option value="unavailable">Unavailable</option></select></label><label><span>Expertise, separated by commas</span><input value={form.expertise} onChange={(event) => setForm({ ...form, expertise: event.target.value })} /></label><label className="full"><span>Supporter introduction</span><textarea value={form.bio} onChange={(event) => setForm({ ...form, bio: event.target.value })} maxLength={500} /></label></>}</div><div className="privacy-settings"><h3>Privacy preferences</h3><label><input type="checkbox" checked={form.showOnline} onChange={(event) => setForm({ ...form, showOnline: event.target.checked })} /><span><b>Show online availability</b><small>Let your current peer connection know when you are available.</small></span></label><label><input type="checkbox" checked={form.allowReminders} onChange={(event) => setForm({ ...form, allowReminders: event.target.checked })} /><span><b>Mood check-in reminders</b><small>Allow MentalBridge to display reminder notifications.</small></span></label></div><button className="button button-dark" disabled={saving}>{saving ? <><LoaderCircle className="spin" size={16} /> Saving…</> : <><Save size={16} /> Save settings</>}</button></form><aside className="settings-aside"><ShieldCheck size={28} /><h3>Your identity stays protected</h3><p>Community posts display your anonymous name. Your full name and email are not shown publicly.</p><div><b>Role</b><span>{user.role}</span></div><div><b>Account status</b><span>{user.status}</span></div></aside></div>
 }
 
 function HelpView({ onNavigate, user }) {
