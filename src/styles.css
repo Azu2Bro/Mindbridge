@@ -619,6 +619,19 @@ body { font-size: 16px; line-height: 1.55; }
   overflow-wrap: anywhere;
 }
 
+/* Community stories are user-written content and must remain easy to read. */
+.community-post { color: var(--ink); }
+.community-post .community-post-head .post-meta { color: var(--ink-2); font-size: 14px; opacity: 1; }
+.community-post .community-post-head .post-meta b { color: var(--ink); font-size: 15px; font-weight: 700; }
+.community-post .community-post-head .post-meta small { color: var(--muted); font-size: 13.5px; opacity: 1; }
+.community-post .category-tag { color: var(--green-2); font-size: 13px; font-weight: 700; opacity: 1; }
+.community-post h2 { color: var(--ink); font-size: 21px; font-weight: 700; line-height: 1.3; }
+.community-post > p { color: var(--ink-2); font-size: 17px; font-weight: 500; line-height: 1.75; opacity: 1; }
+.community-post-actions button { color: var(--ink-2); font-size: 14px; opacity: 1; }
+[data-theme='dark'] .community-post > p { color: #e4f2e9; }
+[data-theme='dark'] .community-post .community-post-head .post-meta { color: #d7e8de; }
+[data-theme='dark'] .community-post .community-post-head .post-meta small { color: #b7cfc2; }
+
 /* Readable notifications in both themes and within narrow viewports. */
 .notification-popover { width: min(400px, calc(100vw - 24px)); color: var(--ink); background: var(--paper); }
 .notification-list { max-height: min(480px, calc(100dvh - 170px)); overflow-y: auto; overscroll-behavior: contain; }
