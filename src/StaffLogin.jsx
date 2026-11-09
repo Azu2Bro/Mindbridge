@@ -1,10 +1,9 @@
 import { useState } from 'react'
 import { ArrowLeft, ArrowRight, Eye, EyeOff, HeartHandshake, LoaderCircle, LockKeyhole, ScrollText, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { useAuth } from './AuthContext'
-import GoogleSignInButton from './GoogleSignInButton'
 
 export default function StaffLogin({ theme }) {
-  const { staffLogin, staffGoogleLogin } = useAuth()
+  const { staffLogin } = useAuth()
   const [form, setForm] = useState({ email: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -18,19 +17,6 @@ export default function StaffLogin({ theme }) {
     setError('')
     try {
       await staffLogin({ email: form.email.trim(), password: form.password })
-      window.history.replaceState({}, '', '/')
-    } catch (submitError) {
-      setError(submitError.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleGoogleCredential = async (credential) => {
-    setLoading(true)
-    setError('')
-    try {
-      await staffGoogleLogin(credential)
       window.history.replaceState({}, '', '/')
     } catch (submitError) {
       setError(submitError.message)
@@ -63,9 +49,6 @@ export default function StaffLogin({ theme }) {
         <a className="staff-back" href="/"><ArrowLeft size={16} /> Back to the member site</a>
         <h2>Sign in as staff</h2>
         <p>Use the work email attached to your moderator or administrator role.</p>
-
-        <GoogleSignInButton onCredential={handleGoogleCredential} disabled={loading} text="signin_with" />
-        <div className="auth-divider"><span>or use staff credentials</span></div>
 
         <label className="auth-field">
           <span>Staff email address</span>

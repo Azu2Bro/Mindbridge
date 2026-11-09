@@ -29,7 +29,7 @@ Demo accounts all use the password `Demo123!`:
 | Who | Where | Endpoint |
 |---|---|---|
 | Members and peer volunteers | **Login** / **Sign up** in the landing navbar | `POST /api/auth/login` or `POST /api/auth/google` |
-| Moderators and administrators | `/staff` directly | `POST http://localhost:3002/api/auth/staff/login` or `POST http://localhost:3002/api/auth/staff/google` |
+| Moderators and administrators | `/staff` directly | `POST http://localhost:3002/api/auth/staff/login` |
 
 The two portals are enforced by separate Node processes, not just separate pages. The member API never accepts a staff login request; the staff-authentication service only admits moderator and administrator roles. It has its own tighter rate limit and writes every accepted and refused attempt to the shared audit log.
 `/admin` and `/moderator` both open the same staff portal.
@@ -113,7 +113,7 @@ In development, one-time verification and password-reset tokens can be completed
 ### Accounts and privacy
 
 - Registration with mandatory expiring email verification and bcrypt password hashing
-- Google Identity Services sign-up/sign-in with server-verified ID tokens; staff Google sign-in only admits existing moderator and administrator accounts
+- Google Identity Services sign-up/sign-in for members and volunteers with server-verified ID tokens; staff authentication remains email/password only
 - Separate member/volunteer and moderator/administrator login portals, enforced by two distinct
   server endpoints with their own rate limits and audit logging
 - Seven-day signed JWT sessions

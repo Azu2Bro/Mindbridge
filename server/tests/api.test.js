@@ -19,7 +19,7 @@ async function startTestApi({ googleVerifier } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'mentalbridge-test-'))
   const store = new JsonStore(join(directory, 'database.json'))
   const app = await createApp({ store, ...(googleVerifier ? { googleVerifier } : {}) })
-  const staffApp = await createStaffAuthApp({ store, ...(googleVerifier ? { googleVerifier } : {}) })
+  const staffApp = await createStaffAuthApp({ store })
   const server = await new Promise((resolve) => {
     const instance = app.listen(0, '127.0.0.1', () => resolve(instance))
   })
@@ -71,12 +71,10 @@ test('signup accepts Bengali names, common punctuation, and a blank optional ali
   assert.equal(invalidAlias.data.error, 'Anonymous name can contain letters, numbers, spaces, periods, apostrophes, underscores, and hyphens')
 })
 
-test('Google login creates members while preserving the separate staff boundary', async (context) => {
+test('Google login creates members without granting access to staff accounts', async (context) => {
   const identities = {
     member: { sub: 'google-member-1', email: 'google.member@example.com', name: 'Google Member' },
     admin: { sub: 'google-admin-1', email: 'admin@mentalbridge.demo', name: 'Demo Admin' },
-    ordinary: { sub: 'google-ordinary-1', email: 'alex@mentalbridge.demo', name: 'Alex Morgan' },
-    unknown: { sub: 'google-unknown-1', email: 'unknown.staff@example.com', name: 'Unknown Staff' },
   }
   const api = await startTestApi({ googleVerifier: async (credential) => identities[credential] })
   context.after(async () => {
@@ -104,14 +102,6 @@ test('Google login creates members while preserving the separate staff boundary'
   assert.equal(adminOnMemberPortal.response.status, 403)
   assert.equal(adminOnMemberPortal.data.staffPortal, true)
 
-  const adminOnStaffPortal = await call(api.staffBaseUrl, '/auth/staff/google', { method: 'POST', body: { credential: 'admin' } })
-  assert.equal(adminOnStaffPortal.response.status, 200)
-  assert.equal(adminOnStaffPortal.data.user.role, 'admin')
-
-  const memberOnStaffPortal = await call(api.staffBaseUrl, '/auth/staff/google', { method: 'POST', body: { credential: 'ordinary' } })
-  assert.equal(memberOnStaffPortal.response.status, 403)
-  const unknownOnStaffPortal = await call(api.staffBaseUrl, '/auth/staff/google', { method: 'POST', body: { credential: 'unknown' } })
-  assert.equal(unknownOnStaffPortal.response.status, 403)
 })
 
 test('complete member and administration workflow', { timeout: 90000 }, async (context) => {

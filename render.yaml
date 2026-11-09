@@ -111,13 +111,6 @@ services:
       - key: JWT_SECRET
         sync: false
 
-      # Use the exact same Google Web client as the browser and member API.
-      - key: GOOGLE_CLIENT_ID
-        fromService:
-          type: web
-          name: mentalbridge
-          envVarKey: GOOGLE_CLIENT_ID
-
       # Both services authenticate against the same persistent user records.
       - key: MONGODB_URI
         sync: false
