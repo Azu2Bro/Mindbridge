@@ -132,12 +132,12 @@ const resources = [
 
 const resourceIconMap = { Wind, Headphones, Coffee, FileText, MoonStar, HeartHandshake, BookOpen }
 const resourceImageMap = {
-  Anxiety: 'https://images.unsplash.com/photo-1499209974431-9dddcece7f88?auto=format&fit=crop&w=900&q=82',
-  Burnout: 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=900&q=82',
-  Mindfulness: 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=900&q=82',
-  Sleep: 'https://images.unsplash.com/photo-1515894203077-9cd36032142f?auto=format&fit=crop&w=900&q=82',
-  'Self-care': 'https://images.unsplash.com/photo-1540555700478-4be289fbecef?auto=format&fit=crop&w=900&q=82',
-  Loneliness: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=900&q=82',
+  Anxiety: '/resource-anxiety.svg',
+  Burnout: '/resource-burnout.svg',
+  Mindfulness: '/resource-mindfulness.svg',
+  Sleep: '/resource-sleep.svg',
+  'Self-care': '/resource-self-care.svg',
+  Loneliness: '/resource-loneliness.svg',
 }
 const resourceImage = (resource) => resource.image || resourceImageMap[resource.category]
 
