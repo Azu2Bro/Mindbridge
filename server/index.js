@@ -198,7 +198,7 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
   const configuredOrigins = process.env.CLIENT_ORIGIN?.split(',').map((item) => item.trim()).filter(Boolean)
   if (configuredOrigins?.length) app.use(cors({ origin: configuredOrigins, credentials: true }))
   else if (process.env.NODE_ENV !== 'production') app.use(cors({ origin: ['http://localhost:5173', 'http://127.0.0.1:5173'], credentials: true }))
-  app.use(express.json({ limit: '48kb' }))
+  app.use(express.json({ limit: '512kb' }))
   app.use('/api/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 80, standardHeaders: true, legacyHeaders: false }))
 
   app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'mentalbridge-api', storage: app.locals.storageMode, ai: process.env.AI_PROVIDER || 'ollama', timestamp: now() }))
@@ -210,13 +210,14 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
       anonymousName: optionalAnonymousNameSchema,
       email: emailSchema,
       password: passwordSchema,
+      avatarUrl: z.string().regex(/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/).max(450000).optional(),
     }), req.body)
     if (dataStore.data.users.some((user) => user.email === body.email)) return res.status(409).json({ error: 'An account with this email already exists' })
     const user = {
       id: id('user'), email: body.email, passwordHash: await bcrypt.hash(body.password, 12), displayName: body.displayName,
       anonymousName: body.anonymousName || `GentleRiver${Math.floor(Math.random() * 900 + 100)}`,
       role: 'user', status: 'active', privacy: { showOnline: true, allowReminders: true }, bookmarks: [],
-      emailVerified: false, createdAt: now(), avatarColor: '#e5aa82',
+      emailVerified: false, createdAt: now(), avatarColor: '#e5aa82', avatarUrl: body.avatarUrl,
     }
     const verificationToken = randomBytes(32).toString('hex')
     const tokenHash = createHash('sha256').update(verificationToken).digest('hex')
@@ -405,6 +406,7 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
       availability: z.enum(['available', 'limited', 'unavailable']).optional(),
       bio: z.string().max(500).optional(),
       expertise: z.array(z.string().trim().min(2).max(50)).max(8).optional(),
+      avatarUrl: z.string().regex(/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/).max(450000).optional(),
     }), req.body)
     const updated = await dataStore.mutate((data) => {
       const user = data.users.find((item) => item.id === req.user.id)

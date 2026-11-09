@@ -59,6 +59,7 @@ import {
   Sun,
 } from 'lucide-react'
 import { api, connectRealtime } from './api'
+import ProfilePicturePicker from './ProfilePicturePicker'
 import LandingPage from './LandingPage'
 import StaffLogin from './StaffLogin'
 import { useAuth } from './AuthContext'
@@ -306,7 +307,7 @@ function App() {
             </div>
             <div className="popover-wrap">
               <button className="profile-trigger" onClick={() => { setProfileOpen(!profileOpen); setNotificationsOpen(false) }} aria-label="Open profile menu">
-                <span className="avatar avatar-user">{user.displayName.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span>
+                <span className="avatar avatar-user">{user.avatarUrl ? <img src={user.avatarUrl} alt="" /> : user.displayName.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</span>
                 <span className="profile-name">{user.displayName}</span>
                 <ChevronDown size={15} />
               </button>
@@ -1188,7 +1189,7 @@ function SettingsView({ user, refreshUser, showToast }) {
   const [form, setForm] = useState({
     displayName: user.displayName || '', anonymousName: user.anonymousName || '',
     showOnline: user.privacy?.showOnline ?? true, allowReminders: user.privacy?.allowReminders ?? true,
-    availability: user.availability || 'available', bio: user.bio || '', expertise: (user.expertise || []).join(', '),
+    availability: user.availability || 'available', bio: user.bio || '', expertise: (user.expertise || []).join(', '), avatarUrl: user.avatarUrl || '',
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -1196,12 +1197,13 @@ function SettingsView({ user, refreshUser, showToast }) {
     event.preventDefault(); setSaving(true); setError('')
     try {
       const updates = { displayName: form.displayName, anonymousName: form.anonymousName, privacy: { showOnline: form.showOnline, allowReminders: form.allowReminders } }
+      if (form.avatarUrl) updates.avatarUrl = form.avatarUrl
       if (user.role === 'volunteer') Object.assign(updates, { availability: form.availability, bio: form.bio, expertise: form.expertise.split(',').map((item) => item.trim()).filter(Boolean) })
       await api.updateProfile(updates); await refreshUser(); showToast('Account settings saved')
     } catch (requestError) { setError(requestError.message) }
     finally { setSaving(false) }
   }
-  return <div className="settings-layout"><form className="settings-card" onSubmit={save}><div className="section-heading"><div><span className="eyebrow">PROFILE</span><h2>Your account</h2></div><span className="safe-label"><LockKeyhole size={14} /> Private account information</span></div>{error && <InlineError message={error} />}<div className="settings-grid"><label><span>Full name</span><input required minLength={2} value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} /></label><label><span>Anonymous community name</span><input required minLength={3} value={form.anonymousName} onChange={(event) => setForm({ ...form, anonymousName: event.target.value })} /></label><label className="full"><span>Email address</span><input value={user.email} disabled /><small>Email changes require administrator verification.</small></label>{user.role === 'volunteer' && <><label><span>Availability</span><select value={form.availability} onChange={(event) => setForm({ ...form, availability: event.target.value })}><option value="available">Available</option><option value="limited">Limited</option><option value="unavailable">Unavailable</option></select></label><label><span>Expertise, separated by commas</span><input value={form.expertise} onChange={(event) => setForm({ ...form, expertise: event.target.value })} /></label><label className="full"><span>Supporter introduction</span><textarea value={form.bio} onChange={(event) => setForm({ ...form, bio: event.target.value })} maxLength={500} /></label></>}</div><div className="privacy-settings"><h3>Privacy preferences</h3><label><input type="checkbox" checked={form.showOnline} onChange={(event) => setForm({ ...form, showOnline: event.target.checked })} /><span><b>Show online availability</b><small>Let your current peer connection know when you are available.</small></span></label><label><input type="checkbox" checked={form.allowReminders} onChange={(event) => setForm({ ...form, allowReminders: event.target.checked })} /><span><b>Mood check-in reminders</b><small>Allow MentalBridge to display reminder notifications.</small></span></label></div><button className="button button-dark" disabled={saving}>{saving ? <><LoaderCircle className="spin" size={16} /> Saving…</> : <><Save size={16} /> Save settings</>}</button></form><aside className="settings-aside"><ShieldCheck size={28} /><h3>Your identity stays protected</h3><p>Community posts display your anonymous name. Your full name and email are not shown publicly.</p><div><b>Role</b><span>{user.role}</span></div><div><b>Account status</b><span>{user.status}</span></div></aside></div>
+  return <div className="settings-layout"><form className="settings-card" onSubmit={save}><div className="section-heading"><div><span className="eyebrow">PROFILE</span><h2>Your account</h2></div><span className="safe-label"><LockKeyhole size={14} /> Private account information</span></div>{error && <InlineError message={error} />}<ProfilePicturePicker value={form.avatarUrl} onChange={(avatarUrl) => setForm({ ...form, avatarUrl })} /><div className="settings-grid"><label><span>Full name</span><input required minLength={2} value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} /></label><label><span>Anonymous community name</span><input required minLength={3} value={form.anonymousName} onChange={(event) => setForm({ ...form, anonymousName: event.target.value })} /></label><label className="full"><span>Email address</span><input value={user.email} disabled /><small>Email changes require administrator verification.</small></label>{user.role === 'volunteer' && <><label><span>Availability</span><select value={form.availability} onChange={(event) => setForm({ ...form, availability: event.target.value })}><option value="available">Available</option><option value="limited">Limited</option><option value="unavailable">Unavailable</option></select></label><label><span>Expertise, separated by commas</span><input value={form.expertise} onChange={(event) => setForm({ ...form, expertise: event.target.value })} /></label><label className="full"><span>Supporter introduction</span><textarea value={form.bio} onChange={(event) => setForm({ ...form, bio: event.target.value })} maxLength={500} /></label></>}</div><div className="privacy-settings"><h3>Privacy preferences</h3><label><input type="checkbox" checked={form.showOnline} onChange={(event) => setForm({ ...form, showOnline: event.target.checked })} /><span><b>Show online availability</b><small>Let your current peer connection know when you are available.</small></span></label><label><input type="checkbox" checked={form.allowReminders} onChange={(event) => setForm({ ...form, allowReminders: event.target.checked })} /><span><b>Mood check-in reminders</b><small>Allow MentalBridge to display reminder notifications.</small></span></label></div><button className="button button-dark" disabled={saving}>{saving ? <><LoaderCircle className="spin" size={16} /> Saving…</> : <><Save size={16} /> Save settings</>}</button></form><aside className="settings-aside"><ShieldCheck size={28} /><h3>Your identity stays protected</h3><p>Community posts display your anonymous name. Your full name and email are not shown publicly.</p><div><b>Role</b><span>{user.role}</span></div><div><b>Account status</b><span>{user.status}</span></div></aside></div>
 }
 
 function HelpView({ onNavigate, user }) {
