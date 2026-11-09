@@ -620,13 +620,16 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     res.json({ post: formatPost(post, req.user.id, req.user.postBookmarks || []) })
   }))
   app.post('/api/posts/:postId/comments', allowRoles('user', 'volunteer'), asyncRoute(async (req, res) => {
-    const text = parse(z.string().trim().min(1).max(1200), req.body?.text)
-    const comment = { id: id('comment'), userId: req.user.id, author: req.user.anonymousName, text, createdAt: now(), removed: false }
+    const body = parse(z.object({ text: z.string().trim().min(1).max(1200), parentId: z.string().optional().nullable() }), req.body)
+    const text = body.text
     await dataStore.mutate((data) => {
       const post = data.posts.find((item) => item.id === req.params.postId && !item.removed)
       if (!post || post.locked) { const error = new Error(post?.locked ? 'This discussion is locked' : 'Post not found'); error.status = post ? 409 : 404; throw error }
+      if (body.parentId && !post.comments.some((item) => item.id === body.parentId && !item.removed)) { const error = new Error('Comment not found'); error.status = 404; throw error }
+      const comment = { id: id('comment'), userId: req.user.id, author: req.user.anonymousName, text, parentId: body.parentId || null, createdAt: now(), removed: false }
       post.comments.push(comment); return comment
     })
+    const comment = dataStore.data.posts.find((item) => item.id === req.params.postId)?.comments.at(-1)
     res.status(201).json({ comment })
   }))
   app.post('/api/posts/:postId/bookmark', allowRoles('user', 'volunteer'), asyncRoute(async (req, res) => {
@@ -643,14 +646,16 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
   }))
   app.post('/api/posts/:postId/report', allowRoles('user', 'volunteer'), asyncRoute(async (req, res) => {
     const body = parse(z.object({
-      category: z.enum(['harassment', 'bullying', 'hate_speech', 'threats', 'self_harm', 'spam', 'other']),
+      category: z.enum(['harassment', 'bullying', 'hate_speech', 'threats', 'self_harm', 'spam', 'other']).optional(),
       details: z.string().trim().max(500).optional().default(''),
+      reason: z.string().trim().max(500).optional(),
     }), req.body)
+    const category = body.category || 'other'
     const target = dataStore.data.posts.find((post) => post.id === req.params.postId && !post.removed)
     if (!target) return res.status(404).json({ error: 'Post not found' })
     const existing = dataStore.data.reports.find((report) => report.reporterId === req.user.id && report.targetId === req.params.postId && ['open', 'reviewing'].includes(report.status))
     if (existing) return res.status(409).json({ error: 'You have already reported this post' })
-    const report = { id: id('report'), reporterId: req.user.id, targetType: 'post', targetId: req.params.postId, category: body.category, reason: body.details || body.category, status: 'open', createdAt: now() }
+    const report = { id: id('report'), reporterId: req.user.id, targetType: 'post', targetId: req.params.postId, category, reason: body.details || body.reason || category, status: 'open', createdAt: now() }
     await dataStore.mutate((data) => { data.reports.push(report); return report })
     res.status(201).json({ report })
   }))

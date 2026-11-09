@@ -83,7 +83,7 @@ export const api = {
   updatePost: (postId, post) => request(`/posts/${postId}`, json('PUT', post)),
   deletePost: (postId) => request(`/posts/${postId}`, { method: 'DELETE' }),
   reactToPost: (postId) => request(`/posts/${postId}/reactions`, json('POST', {})),
-  commentOnPost: (postId, text) => request(`/posts/${postId}/comments`, json('POST', { text })),
+  commentOnPost: (postId, text, parentId) => request(`/posts/${postId}/comments`, json('POST', { text, parentId })),
   bookmarkPost: (postId) => request(`/posts/${postId}/bookmark`, json('POST', {})),
   reportPost: (postId, category, details) => request(`/posts/${postId}/report`, json('POST', { category, details })),
   resources: (query = '', category = '') => request(`/resources?q=${encodeURIComponent(query)}&category=${encodeURIComponent(category)}`),
