@@ -102,6 +102,7 @@ test('Groq uses an open-source model through its chat API', async (t) => {
    assert.equal(options.headers.Authorization, 'Bearer hf_test_token')
    const request = JSON.parse(options.body)
    assert.equal(request.model, 'llama-3.1-8b-instant')
+   assert.deepEqual(request.response_format, { type: 'json_object' })
    return {
      ok: true,
      json: async () => ({

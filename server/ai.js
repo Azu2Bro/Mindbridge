@@ -154,31 +154,40 @@ async function analyzeWithGemini(text) {
 async function analyzeWithGroq(text, local) {
   if (!process.env.GROQ_API_KEY) throw new Error('Groq API key is not configured')
   const grounded = groundedAnalysis(local)
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+  let lastError
+  for (const model of [process.env.GROQ_MODEL || 'llama-3.1-8b-instant', 'openai/gpt-oss-120b']) {
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
+          model,
           messages: [
             { role: 'system', content: `${analysisInstruction(grounded.tags)} Return valid JSON only.` },
             { role: 'user', content: text },
           ],
           temperature: 0.1,
-          max_tokens: 350,
+          max_tokens: 500,
           stream: false,
+          response_format: { type: 'json_object' },
         }),
         signal: AbortSignal.timeout(20000),
       })
-  if (!response.ok) {
-    const detail = await response.text()
-    throw new Error(`Groq request failed (${response.status}): ${detail.slice(0, 180)}`)
+      if (!response.ok) {
+        const detail = await response.text()
+        throw new Error(`Groq request failed (${response.status}): ${detail.slice(0, 180)}`)
+      }
+      const payload = await response.json()
+      const content = payload.choices?.[0]?.message?.content
+      return normalizeModelAnalysis(parseModelJson(content), grounded.tags)
+    } catch (error) {
+      lastError = error
+    }
   }
-  const payload = await response.json()
-  const content = payload.choices?.[0]?.message?.content
-  return normalizeModelAnalysis(parseModelJson(content), grounded.tags)
+  throw lastError
 }
 
 export async function analyzeSupportText(text) {
