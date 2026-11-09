@@ -672,6 +672,15 @@ body { font-size: 16px; line-height: 1.55; }
 .app-shell .hero-card p,
 .app-shell .support-intro-card p { color: #d7ebe1; }
 .app-shell .privacy-panel p { color: #c8ddd4; }
+.app-shell .pattern-card { color: var(--ink); border-color: #d7c9a9; background: #fff8e9; }
+.app-shell .pattern-card .eyebrow { color: #8b6a2f; font-size: 13px; opacity: 1; }
+.app-shell .pattern-card h3 { color: #3b3020; font-size: 20px; font-weight: 700; }
+.app-shell .pattern-card p { color: #5d503b; font-size: 15px; line-height: 1.65; opacity: 1; }
+.app-shell .pattern-icon { color: #47744f; background: #dcebd5; }
+[data-theme='dark'] .app-shell .pattern-card { border-color: #6f6045; background: #30291d; }
+[data-theme='dark'] .app-shell .pattern-card .eyebrow { color: #f0c878; }
+[data-theme='dark'] .app-shell .pattern-card h3 { color: #fff4d8; }
+[data-theme='dark'] .app-shell .pattern-card p { color: #e4d7b8; }
 .notification-item b { overflow-wrap: anywhere; }
 .notification-item small { color: var(--muted); }
 .notification-item .status-icon { flex-shrink: 0; }
