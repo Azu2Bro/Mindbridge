@@ -155,7 +155,7 @@ async function analyzeWithHuggingFace(text, local) {
   if (!process.env.HF_API_TOKEN) throw new Error('Hugging Face token is not configured')
   const grounded = groundedAnalysis(local)
   let lastError
-  const models = [process.env.HF_MODEL || 'openai/gpt-oss-120b', 'meta-llama/Llama-3.1-8B-Instruct']
+  const models = ['openai/gpt-oss-120b', 'meta-llama/Llama-3.1-8B-Instruct']
   for (const model of [...new Set(models)]) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
