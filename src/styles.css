@@ -61,6 +61,8 @@ h1, h2, h3, .brand { font-family: 'Manrope', 'DM Sans', sans-serif; }
 .nav-item:hover { color: white; background: rgba(255,255,255,.055); }
 .nav-item.active { color: white; background: rgba(255,255,255,.11); box-shadow: inset 3px 0 0 var(--coral); }
 .nav-item.active svg { color: #ffa07b; }
+.volunteer-apply-nav { margin-top: 8px; color: #ffd2be; background: rgba(238,130,93,.14); border: 1px solid rgba(255,176,145,.24); }
+.volunteer-apply-nav:hover { color: #fff; background: rgba(238,130,93,.24); }
 .nav-item em { margin-left: auto; min-width: 19px; height: 19px; padding: 0 5px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; font-size: 13px; font-style: normal; color: #fff; background: var(--coral); }
 .sidebar-spacer { flex: 1; min-height: 20px; }
 .supporter-card { margin: 18px 1px 19px; padding: 16px; border-radius: 13px; background: rgba(255,255,255,.075); border: 1px solid rgba(255,255,255,.08); }

@@ -12,7 +12,7 @@ export default function LandingPage({ theme, toggleTheme, onAccountFlowComplete 
   return <div className="landing-page">
     <header className="landing-nav">
       <a className="landing-brand" href="#top"><span className="brand-mark"><HeartHandshake size={23} /></span><span>Mental<span>Bridge</span></span></a>
-      <nav className={menuOpen ? 'open' : ''} aria-label="Landing navigation"><a href="#how" onClick={() => setMenuOpen(false)}>How it works</a><a href="#safety" onClick={() => setMenuOpen(false)}>Safety</a><a href="#resources" onClick={() => setMenuOpen(false)}>Resources</a><button className="landing-login" onClick={() => openAuth('login')}>Login</button><button className="button button-coral" onClick={() => openAuth('register')}>Sign up</button></nav>
+      <nav className={menuOpen ? 'open' : ''} aria-label="Landing navigation"><a href="#how" onClick={() => setMenuOpen(false)}>How it works</a><a href="#safety" onClick={() => setMenuOpen(false)}>Safety</a><a href="#resources" onClick={() => setMenuOpen(false)}>Resources</a><button className="landing-volunteer-link" onClick={() => openAuth('volunteerApply')}>Apply as volunteer</button><button className="landing-login" onClick={() => openAuth('login')}>Login</button><button className="button button-coral" onClick={() => openAuth('register')}>Sign up</button></nav>
       <div className="landing-nav-actions"><button className="theme-toggle" aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} onClick={toggleTheme}>{theme === 'dark' ? <Sun size={19} /> : <Moon size={19} />}</button><button className="landing-menu" aria-label="Toggle navigation" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X size={21} /> : <Menu size={21} />}</button></div>
     </header>
 

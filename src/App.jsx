@@ -377,6 +377,7 @@ function Sidebar({ active, navigate, open, onClose, user, counts }) {
               <Icon size={19} strokeWidth={1.9} /><span>{label}</span>{counts[id] > 0 && <em aria-label={`${label} count`}>{counts[id]}</em>}
             </button>
           ))}
+          {user.role === 'user' && <button className="nav-item volunteer-apply-nav" onClick={() => navigate('settings')}><HeartHandshake size={19} strokeWidth={1.9} /><span>Become a volunteer</span></button>}
         </nav>
         <div className="sidebar-spacer" />
         {user.role === 'user' && <div className="supporter-card">
