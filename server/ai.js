@@ -147,6 +147,33 @@ async function analyzeWithGemini(text) {
   return normalizeModelAnalysis(JSON.parse(output))
 }
 
+async function analyzeWithHuggingFace(text, local) {
+  if (!process.env.HF_API_TOKEN) throw new Error('Hugging Face token is not configured')
+  const grounded = groundedAnalysis(local)
+  const response = await fetch('https://router.huggingface.co/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.HF_API_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: process.env.HF_MODEL || 'Qwen/Qwen2.5-7B-Instruct',
+      messages: [
+        { role: 'system', content: `${analysisInstruction(grounded.tags)} Return valid JSON only.` },
+        { role: 'user', content: text },
+      ],
+      temperature: 0.1,
+      max_tokens: 350,
+      stream: false,
+    }),
+    signal: AbortSignal.timeout(20000),
+  })
+  if (!response.ok) throw new Error(`Hugging Face request failed (${response.status})`)
+  const payload = await response.json()
+  const content = payload.choices?.[0]?.message?.content
+  return normalizeModelAnalysis(parseModelJson(content))
+}
+
 export async function analyzeSupportText(text) {
   const local = localAnalysis(text)
   if (local.riskLevel === 'urgent') return local
@@ -186,6 +213,15 @@ export async function analyzeSupportText(text) {
       return { ...local, fallbackReason: 'The AI service is unavailable. Review this basic local summary before continuing.' }
     }
   }
+  if (provider === 'huggingface') {
+    try {
+      const parsed = await analyzeWithHuggingFace(text, local)
+      return { ...parsed, riskLevel: 'standard', crisisNotice: null, provider: 'huggingface' }
+    } catch (error) {
+      console.error('Hugging Face open-source model failed; using local analyzer:', error.message)
+      return { ...local, provider: 'local', fallbackReason: `Hugging Face analysis failed: ${error.message}` }
+    }
+  }
 
   // Gemini is preferred when configured. Urgent-language screening always stays
   // local, so crisis-sensitive text is never sent to an external model.
@@ -198,7 +234,8 @@ export async function analyzeSupportText(text) {
       return local
     }
   }
-  if (provider !== 'openai' || !process.env.OPENAI_API_KEY) return local
+  if (provider !== 'openai') return { ...local, provider: 'local', fallbackReason: `Unsupported AI provider: ${provider}` }
+  if (!process.env.OPENAI_API_KEY) return { ...local, provider: 'local', fallbackReason: 'OpenAI is selected but OPENAI_API_KEY is not configured.' }
 
   // Keep the coordination flow responsive. If the external model is unavailable,
   // the deterministic local analyzer below still returns a useful summary.
@@ -230,7 +267,7 @@ export async function analyzeSupportText(text) {
     return { ...parsed, riskLevel: 'standard', crisisNotice: null, provider: 'openai' }
   } catch (error) {
     console.error('OpenAI analysis failed; using local analyzer:', error.message)
-    return local
+    return { ...local, provider: 'local', fallbackReason: `OpenAI analysis failed: ${error.message}` }
   }
 }
 

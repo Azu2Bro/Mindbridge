@@ -19,10 +19,9 @@ COPY --from=build /app/dist ./dist
 COPY server ./server
 COPY scripts/start-production.mjs ./scripts/start-production.mjs
 
-# Render's free instance cannot reliably keep the embedded model server alive.
-# Production uses the deterministic local analyzer unless an external provider
-# is explicitly configured.
-ENV AI_PROVIDER=local
+# Production uses the configured hosted AI provider; local analysis remains the
+# explicit fallback when the provider is unavailable.
+ENV AI_PROVIDER=huggingface
 RUN mkdir -p .data
 # Render and most hosts inject PORT; the server falls back to 3001 locally.
 ENV PORT=3001

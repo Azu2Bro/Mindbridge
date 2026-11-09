@@ -55,6 +55,7 @@ test('self-hosted summaries drive matching; malformed AI output falls back local
     assert.equal(request.format.type, 'object')
     return { ok: true, json: async () => ({ message: { content: JSON.stringify({ summary: 'Work deadlines feel overwhelming.', tags: ['Work stress'], priorities: ['Work stress'] }) } }) }
   })
+
   const result = await analyzeSupportText('Work deadlines are overwhelming this week.')
   assert.equal(result.provider, 'ollama')
   const volunteers = [
@@ -90,6 +91,28 @@ test('self-hosted summaries drive matching; malformed AI output falls back local
   const embedded = await analyzeSupportText('Work deadlines are overwhelming this week.')
   assert.equal(embedded.provider, 'llamacpp')
   assert.deepEqual(embedded.tags, ['Work stress'])
+})
+
+test('Hugging Face uses an open-source model through the router', async (t) => {
+ setEnv(t, 'AI_PROVIDER', 'huggingface')
+ setEnv(t, 'HF_API_TOKEN', 'hf_test_token')
+ setEnv(t, 'HF_MODEL', 'Qwen/Qwen2.5-7B-Instruct')
+ const fetchMock = t.mock.method(globalThis, 'fetch', async (url, options) => {
+   assert.equal(url, 'https://router.huggingface.co/v1/chat/completions')
+   assert.equal(options.headers.Authorization, 'Bearer hf_test_token')
+   const request = JSON.parse(options.body)
+   assert.equal(request.model, 'Qwen/Qwen2.5-7B-Instruct')
+   return {
+     ok: true,
+     json: async () => ({
+       choices: [{ message: { content: '{"summary":"Work deadlines feel difficult this week.","tags":["Work stress"],"priorities":["Work stress"]}' } }],
+     }),
+   }
+ })
+ const result = await analyzeSupportText('Work deadlines are overwhelming this week.')
+ assert.equal(result.provider, 'huggingface')
+ assert.deepEqual(result.tags, ['Work stress'])
+ fetchMock.mock.restore()
 })
 
 test('matching varies by support themes, priorities, availability, and capacity', () => {
