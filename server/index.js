@@ -167,8 +167,8 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
   if (!suppliedStore) await provisionAccounts(dataStore)
   if (process.env.NODE_ENV === 'production') appBaseUrl()
   const app = express()
-  // Render terminates TLS and forwards one client-IP hop to the Node process.
-  app.set('trust proxy', 1)
+  // Render terminates TLS and forwards client IP headers to the Node process.
+  app.set('trust proxy', true)
   const staffAuthOrigin = process.env.STAFF_AUTH_URL
     ? (/^https?:\/\//.test(process.env.STAFF_AUTH_URL) ? process.env.STAFF_AUTH_URL : `https://${process.env.STAFF_AUTH_URL}`).replace(/\/$/, '')
     : null

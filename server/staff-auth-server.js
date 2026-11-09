@@ -54,8 +54,8 @@ async function writeAuditLog(dataStore, entry) {
 export async function createStaffAuthApp({ store } = {}) {
   const { dataStore, storageMode } = await openStore(store)
   const app = express()
-  // Render terminates TLS and forwards one client-IP hop to the Node process.
-  app.set('trust proxy', 1)
+  // Render terminates TLS and forwards client IP headers to the Node process.
+  app.set('trust proxy', true)
   app.locals.store = dataStore
   app.locals.storageMode = storageMode
 
