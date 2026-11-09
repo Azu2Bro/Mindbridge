@@ -93,6 +93,7 @@ async function normalizeDataStore(dataStore) {
     data.passwordResets ||= []
     data.emailVerifications ||= []
     data.reports ||= []
+    data.volunteerApplications ||= []
     data.auditLogs ||= []
     data.notifications ||= []
     data.conversations ||= []
@@ -203,6 +204,16 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
 
   app.get('/api/health', (req, res) => res.json({ status: 'ok', service: 'mentalbridge-api', storage: app.locals.storageMode, ai: process.env.AI_PROVIDER || 'ollama', timestamp: now() }))
   app.get('/api/auth/google/config', (req, res) => res.json({ enabled: googleIdentityEnabled(), clientId: process.env.GOOGLE_CLIENT_ID || null }))
+  app.post('/api/volunteer-applications', asyncRoute(async (req, res) => {
+    const body = parse(z.object({
+      name: z.string().trim().min(2).max(70), email: emailSchema,
+      experience: z.string().trim().min(20).max(1200), motivation: z.string().trim().min(20).max(1200),
+    }), req.body)
+    if (dataStore.data.volunteerApplications.some((item) => item.email === body.email && ['pending', 'approved'].includes(item.status))) return res.status(409).json({ error: 'An application is already active for this email' })
+    const application = { id: id('volunteer-application'), ...body, userId: null, status: 'pending', createdAt: now() }
+    await dataStore.mutate((data) => { data.volunteerApplications.push(application); return application })
+    res.status(201).json({ message: 'Your volunteer application was sent for moderator review.' })
+  }))
 
   app.post('/api/auth/register', asyncRoute(async (req, res) => {
     const body = parse(z.object({
@@ -415,6 +426,14 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
       return user
     })
     res.json({ user: publicUser(updated) })
+  }))
+  app.post('/api/users/me/volunteer-application', allowRoles('user'), asyncRoute(async (req, res) => {
+    const body = parse(z.object({ experience: z.string().trim().min(20).max(1200), motivation: z.string().trim().min(20).max(1200) }), req.body)
+    const existing = dataStore.data.volunteerApplications.find((item) => item.userId === req.user.id && ['pending', 'approved'].includes(item.status))
+    if (existing) return res.status(409).json({ error: 'You already have an active volunteer application' })
+    const application = { id: id('volunteer-application'), name: req.user.displayName, email: req.user.email, userId: req.user.id, ...body, status: 'pending', createdAt: now() }
+    await dataStore.mutate((data) => { data.volunteerApplications.push(application); return application })
+    res.status(201).json({ message: 'Your volunteer application was sent for moderator review.' })
   }))
 
   app.get('/api/dashboard', allowRoles('user'), (req, res) => {
@@ -819,6 +838,22 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     const users = dataStore.data.users.map((user) => ({ ...publicUser(user), email: req.user.role === 'admin' ? user.email : undefined }))
     res.json({ users })
   })
+  app.get('/api/admin/volunteer-applications', allowRoles('moderator', 'admin'), (req, res) => res.json({ applications: dataStore.data.volunteerApplications.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) }))
+  app.patch('/api/admin/volunteer-applications/:applicationId', allowRoles('moderator', 'admin'), asyncRoute(async (req, res) => {
+    const body = parse(z.object({ status: z.enum(['approved', 'rejected']) }), req.body)
+    const application = await dataStore.mutate((data) => {
+      const item = data.volunteerApplications.find((candidate) => candidate.id === req.params.applicationId)
+      if (!item) { const error = new Error('Volunteer application not found'); error.status = 404; throw error }
+      item.status = body.status; item.reviewedAt = now(); item.reviewedBy = req.user.id
+      if (body.status === 'approved' && item.userId) {
+        const user = data.users.find((candidate) => candidate.id === item.userId)
+        if (user) { user.role = 'volunteer'; user.availability ||= 'unavailable'; user.expertise ||= ['Emotional support']; user.bio ||= 'Peer supporter assigned by the MentalBridge care team.' }
+        data.notifications.push({ id: id('notification'), userId: item.userId, type: 'account', title: 'Volunteer application approved', body: 'You can now support members as a peer volunteer.', read: false, createdAt: now() })
+      }
+      return item
+    })
+    res.json({ application })
+  }))
   app.patch('/api/admin/users/:userId', allowRoles('moderator', 'admin'), asyncRoute(async (req, res) => {
     const body = parse(z.object({
       status: z.enum(['active', 'suspended', 'pending']).optional(),

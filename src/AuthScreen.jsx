@@ -20,7 +20,7 @@ export default function AuthScreen({ initialMode = 'login', onClose }) {
   const [notice, setNotice] = useState('')
   const [resetToken, setResetToken] = useState(urlResetToken)
   const [verificationToken, setVerificationToken] = useState('')
-  const [form, setForm] = useState({ displayName: '', anonymousName: '', email: '', password: '', avatarUrl: '' })
+  const [form, setForm] = useState({ displayName: '', anonymousName: '', email: '', password: '', avatarUrl: '', experience: '', motivation: '' })
 
   useEffect(() => {
     if (!urlVerificationToken || verificationStarted.current) return
@@ -47,6 +47,10 @@ export default function AuthScreen({ initialMode = 'login', onClose }) {
         setVerificationToken(result.verificationToken || '')
         setNotice(result.message)
         setMode('pending')
+      } else if (mode === 'volunteerApply') {
+        const result = await api.applyVolunteer({ name: form.displayName, email: form.email, experience: form.experience, motivation: form.motivation })
+        setNotice(result.message)
+        setMode('applicationSent')
       } else if (mode === 'resend') {
         const result = await api.resendVerification(form.email)
         setVerificationToken(result.verificationToken || '')
@@ -92,7 +96,7 @@ export default function AuthScreen({ initialMode = 'login', onClose }) {
     finally { setLoading(false) }
   }
 
-  const title = mode === 'login' ? 'Welcome back' : mode === 'register' ? 'Create your private space' : mode === 'resend' ? 'Resend verification email' : mode === 'forgot' ? 'Reset your password' : mode === 'reset' ? 'Choose a new password' : mode === 'pending' ? 'Check your inbox' : 'Email verification'
+  const title = mode === 'login' ? 'Welcome back' : mode === 'register' ? 'Create your private space' : mode === 'volunteerApply' ? 'Apply to become a volunteer' : mode === 'resend' ? 'Resend verification email' : mode === 'forgot' ? 'Reset your password' : mode === 'reset' ? 'Choose a new password' : mode === 'pending' ? 'Check your inbox' : 'Email verification'
 
   return <div className="auth-overlay" role="presentation">
     <section className="auth-dialog" role="dialog" aria-modal="true" aria-label={title}>
@@ -106,19 +110,21 @@ export default function AuthScreen({ initialMode = 'login', onClose }) {
         <span className="eyebrow">A SAFE PLACE TO BEGIN</span>
         <h2>{title}</h2>
         {mode === 'login' && <p>Sign in to the member and volunteer space.</p>}
+        {mode === 'volunteerApply' && <p>Moderators review every application before volunteer access is granted.</p>}
         {mode === 'register' && <p>Use a real email address. You must verify it before your first sign-in.</p>}
         {mode === 'forgot' && <p>Enter your account email to receive a secure reset link.</p>}
         {mode === 'reset' && <p>Use a strong password you have not used for this account before.</p>}
-        {['pending', 'verified', 'verifying'].includes(mode) ? <div className="verification-state"><span><MailCheck size={30} /></span><p>{mode === 'verifying' ? 'Verifying your email…' : notice || 'Open the link sent to your email address.'}</p>{error && <div className="auth-error" role="alert">{error}</div>}{mode === 'pending' && <><small>Sent for: {form.email}</small><button type="button" className="button button-secondary" disabled={loading} onClick={resend}>Resend verification email</button>{verificationToken && <button type="button" className="button button-dark" disabled={loading} onClick={verifyDevelopmentAccount}>Verify development account</button>}</>}{mode === 'verified' && error && <button type="button" className="button button-secondary" onClick={() => changeMode('resend')}>Request a new verification link</button>}{mode === 'verified' && !error && <button type="button" className="button button-dark" onClick={() => changeMode('login')}>Continue to sign in <ArrowRight size={16} /></button>}</div> : <>
+        {mode === 'applicationSent' ? <div className="verification-state"><span><ShieldCheck size={30} /></span><p>{notice}</p><button type="button" className="button button-dark" onClick={() => changeMode('login')}>Continue to login <ArrowRight size={16} /></button></div> : ['pending', 'verified', 'verifying'].includes(mode) ? <div className="verification-state"><span><MailCheck size={30} /></span><p>{mode === 'verifying' ? 'Verifying your email…' : notice || 'Open the link sent to your email address.'}</p>{error && <div className="auth-error" role="alert">{error}</div>}{mode === 'pending' && <><small>Sent for: {form.email}</small><button type="button" className="button button-secondary" disabled={loading} onClick={resend}>Resend verification email</button>{verificationToken && <button type="button" className="button button-dark" disabled={loading} onClick={verifyDevelopmentAccount}>Verify development account</button>}</>}{mode === 'verified' && error && <button type="button" className="button button-secondary" onClick={() => changeMode('resend')}>Request a new verification link</button>}{mode === 'verified' && !error && <button type="button" className="button button-dark" onClick={() => changeMode('login')}>Continue to sign in <ArrowRight size={16} /></button>}</div> : <>
           {['login', 'register'].includes(mode) && <><GoogleSignInButton onCredential={handleGoogleCredential} disabled={loading} /><div className="auth-divider"><span>or use email</span></div></>}
+          {mode === 'volunteerApply' && <><div className="auth-field-row"><label><span>Your name</span><input required minLength={2} maxLength={70} value={form.displayName} onChange={update('displayName')} /></label><label><span>Email address</span><input type="email" required value={form.email} onChange={update('email')} /></label></div><label className="auth-field"><span>Relevant experience</span><textarea required minLength={20} maxLength={1200} value={form.experience} onChange={update('experience')} placeholder="Tell moderators about your lived or peer-support experience." /></label><label className="auth-field"><span>Why would you like to volunteer?</span><textarea required minLength={20} maxLength={1200} value={form.motivation} onChange={update('motivation')} placeholder="Share how you would support members safely." /></label></>}
           {mode === 'register' && <><div className="auth-field-row"><label><span>Your name</span><input required minLength={2} maxLength={70} value={form.displayName} onChange={update('displayName')} placeholder="Your private name" /></label><label><span>Anonymous name <em>(optional)</em></span><input minLength={3} maxLength={40} value={form.anonymousName} onChange={update('anonymousName')} placeholder="QuietRiver" /><small className="field-hint">Bengali and English names are supported. Leave blank for an automatic private name.</small></label></div><ProfilePicturePicker value={form.avatarUrl} onChange={(avatarUrl) => setForm({ ...form, avatarUrl })} /></>}
-          {mode !== 'reset' && <label className="auth-field"><span>Email address</span><input type="email" required value={form.email} onChange={update('email')} placeholder="you@example.com" autoComplete="email" /></label>}
-          {!['forgot', 'resend'].includes(mode) && <label className="auth-field"><span>{mode === 'reset' ? 'New password' : 'Password'}</span><div><input type={showPassword ? 'text' : 'password'} required minLength={8} value={form.password} onChange={update('password')} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} /><button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div></label>}
+          {mode !== 'reset' && !['volunteerApply'].includes(mode) && <label className="auth-field"><span>Email address</span><input type="email" required value={form.email} onChange={update('email')} placeholder="you@example.com" autoComplete="email" /></label>}
+          {!['forgot', 'resend', 'volunteerApply'].includes(mode) && <label className="auth-field"><span>{mode === 'reset' ? 'New password' : 'Password'}</span><div><input type={showPassword ? 'text' : 'password'} required minLength={8} value={form.password} onChange={update('password')} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} /><button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div></label>}
           {['register', 'reset'].includes(mode) && <div className="password-hint"><LockKeyhole size={14} /> Use 8+ characters with an uppercase letter and number.</div>}
           {mode === 'login' && <button type="button" className="forgot-link" onClick={() => changeMode('forgot')}>Forgot your password?</button>}
           {error && <div className="auth-error" role="alert">{error}{staffHint && <a className="auth-error-link" href="/staff">Go to the staff portal <ArrowRight size={13} /></a>}</div>}
           {notice && <div className="auth-notice" role="status">{notice}</div>}
-          <button className="button button-dark auth-submit" disabled={loading}>{loading ? <><LoaderCircle className="spin" size={17} /> Please wait…</> : <>{mode === 'login' ? 'Login' : mode === 'register' ? 'Create & verify account' : mode === 'resend' ? 'Send verification link' : mode === 'forgot' ? 'Send reset link' : 'Save new password'} <ArrowRight size={17} /></>}</button>
+          <button className="button button-dark auth-submit" disabled={loading}>{loading ? <><LoaderCircle className="spin" size={17} /> Please wait…</> : <>{mode === 'login' ? 'Login' : mode === 'register' ? 'Create & verify account' : mode === 'volunteerApply' ? 'Submit application' : mode === 'resend' ? 'Send verification link' : mode === 'forgot' ? 'Send reset link' : 'Save new password'} <ArrowRight size={17} /></>}</button>
           <div className="auth-switch">{mode === 'login' ? 'New to MentalBridge?' : 'Ready to return?'} <button type="button" onClick={() => changeMode(mode === 'login' ? 'register' : 'login')}>{mode === 'login' ? 'Create an account' : 'Sign in'}</button></div>
         </>}
         <div className="auth-security"><ShieldCheck size={16} /> MentalBridge never displays your email publicly.</div>

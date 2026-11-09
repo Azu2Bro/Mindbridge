@@ -61,6 +61,10 @@ export const api = {
     return request('/auth/staff/google', json('POST', { credential }), staffApiBase)
   },
   register: (details) => request('/auth/register', json('POST', details)),
+  applyVolunteer: (details) => request('/volunteer-applications', json('POST', details)),
+  applyVolunteerAsMember: (details) => request('/users/me/volunteer-application', json('POST', details)),
+  adminVolunteerApplications: () => request('/admin/volunteer-applications'),
+  updateVolunteerApplication: (id, status) => request(`/admin/volunteer-applications/${id}`, json('PATCH', { status })),
   verifyEmail: (token) => request('/auth/verify-email', json('POST', { token })),
   resendVerification: (email) => request('/auth/resend-verification', json('POST', { email })),
   forgotPassword: (email) => request('/auth/forgot-password', json('POST', { email })),
