@@ -32,7 +32,7 @@ start('/opt/llama/llama-server', [
 ])
 
 async function waitForAi() {
-  const healthUrl = `${(process.env.LLAMACPP_URL || 'http://127.0.0.1:8080').replace(/\/+$/, '')}/health`
+  const healthUrl = 'http://127.0.0.1:8080/health'
   for (let attempt = 0; attempt < 360 && !stopping; attempt++) {
     try {
       const response = await fetch(healthUrl, { signal: AbortSignal.timeout(1000) })

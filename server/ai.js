@@ -85,7 +85,10 @@ function analysisInstruction(tags) {
 
 async function analyzeWithLlamaCpp(text, local) {
   const grounded = groundedAnalysis(local)
-  const baseUrl = (process.env.LLAMACPP_URL || 'http://127.0.0.1:8080').replace(/\/+$/, '')
+  const configuredUrl = process.env.NODE_ENV === 'production'
+    ? 'http://127.0.0.1:8080'
+    : (process.env.LLAMACPP_URL || 'http://127.0.0.1:8080')
+  const baseUrl = configuredUrl.replace(/\/+$/, '')
   const request = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
