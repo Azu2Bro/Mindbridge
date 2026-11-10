@@ -769,3 +769,132 @@ body { font-size: 16px; line-height: 1.55; }
   .section-block, .rail-card, .settings-card, .settings-aside, .info-card, .faq-card, .admin-panel { padding-inline: 12px; }
   .mobile-tabbar button small { font-size: 10px; }
 }
+
+/* Complete phone layout pass. Keep every workflow usable down to 320px without
+   hiding copy or forcing the page itself to scroll sideways. */
+@media (max-width: 940px) {
+  .volunteer-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .volunteer-directory-hero { grid-template-columns: minmax(0, 1fr) 180px; }
+}
+
+@media (max-width: 720px) {
+  html, body, #root, .app-shell, .app-main { max-width: 100%; }
+  .app-shell, .app-main, .staff-page, .landing-page { min-height: 100dvh; }
+
+  .volunteer-directory-hero { min-height: 0; grid-template-columns: 1fr; padding: 30px 22px; }
+  .volunteer-directory-hero h2 { font-size: clamp(25px, 8vw, 32px); overflow-wrap: anywhere; }
+  .volunteer-directory-hero p { overflow-wrap: anywhere; }
+  .volunteer-directory-art { display: none; }
+  .volunteer-card-grid { grid-template-columns: 1fr; }
+  .volunteer-card-bio, .volunteer-card-details { min-height: 0; }
+
+  .messages-shell { height: calc(100dvh - 175px); min-height: 540px; grid-template-rows: minmax(150px, 190px) minmax(0, 1fr); border-radius: 13px; }
+  .conversation-list { max-height: none; }
+  .chat-panel { min-height: 0; }
+  .chat-head { align-items: flex-start; gap: 10px; padding-inline: 13px; }
+  .chat-head > * { min-width: 0; }
+  .chat-safety { padding-inline: 10px; text-align: center; }
+  .message-thread { padding: 16px 12px; }
+  .message-row > div { max-width: 88%; }
+  .composer { padding-inline: 12px; }
+  .composer > button { right: 20px; }
+  .composer > span { left: 15px; }
+
+  .mobile-tabbar button small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .app-footer, .app-footer > div { width: 100%; min-width: 0; }
+  .app-footer span, .app-footer a, .app-footer button { max-width: 100%; overflow-wrap: anywhere; white-space: normal; text-align: left; }
+
+  .toast { right: 12px; left: 12px; bottom: calc(80px + env(safe-area-inset-bottom)); width: auto; overflow-wrap: anywhere; }
+  .profile-popover { position: fixed; top: 70px; right: 12px; width: min(280px, calc(100vw - 24px)); }
+
+  .admin-queue { padding: 15px; }
+  .admin-tabs { flex-wrap: nowrap; max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: thin; }
+  .admin-tabs button { flex: 0 0 auto; }
+  .queue-table { min-width: 680px; }
+
+  .support-modal, .simple-modal { max-height: 100dvh; }
+  .modal-head, .simple-modal > header { padding-inline: 15px; }
+  .modal-brand { min-width: 0; }
+  .modal-brand > span:last-child { min-width: 0; }
+  .modal-brand b, .modal-brand small { overflow-wrap: anywhere; }
+}
+
+@media (max-width: 560px) {
+  .hero-card { min-height: 0; padding-block: 30px; }
+  .hero-copy h2 { font-size: clamp(29px, 10vw, 36px); letter-spacing: -1.2px; }
+  .hero-actions > span { overflow-wrap: anywhere; }
+
+  .landing-kicker { width: auto; max-width: 100%; align-items: flex-start; border-radius: 16px; overflow-wrap: anywhere; }
+  .landing-trust { display: grid; gap: 11px; }
+  .landing-section-head h2, .landing-feature-band h2, .landing-resources h2 { font-size: clamp(29px, 9vw, 38px); letter-spacing: -1.1px; overflow-wrap: anywhere; }
+  .landing-steps article { min-height: 0; padding: 23px 20px; }
+  .landing-steps h3 { margin-top: 24px; overflow-wrap: anywhere; }
+  .landing-feature-band { min-height: 0; }
+  .resource-preview { padding: 24px 20px; }
+  .resource-preview b { overflow-wrap: anywhere; }
+  .landing-footer-contact { min-width: 0; padding: 15px; }
+  .landing-footer-contact > div { min-width: 0; }
+  .landing-footer-contact a, .landing-footer-bottom span { overflow-wrap: anywhere; }
+
+  .mood-picker-large { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .mood-picker-large button { min-height: 84px; }
+  .mood-chart { gap: 5px; padding-inline: 3px; }
+  .chart-column small { font-size: 10px; }
+
+  .profile-picture-picker { align-items: flex-start; flex-direction: column; }
+  .profile-picture-picker > div, .profile-picture-picker .button { width: 100%; }
+  .privacy-settings { padding: 15px 13px; }
+  .privacy-settings label > span { min-width: 0; }
+  .privacy-settings b, .privacy-settings small { overflow-wrap: anywhere; }
+
+  .user-table > div { grid-template-columns: auto minmax(0, 1fr); }
+  .user-table b, .user-table small { overflow-wrap: anywhere; }
+  .user-table select, .user-table .button { grid-column: 1 / -1; width: 100%; }
+  .user-table .status-badge { grid-column: 1 / -1; }
+  .management-list article, .report-list article { padding-inline: 14px; }
+  .management-list article > div:first-child { align-items: flex-start; flex-direction: column; }
+  .management-list article > div:last-child, .report-list article > div:last-child { width: 100%; }
+  .management-list article > div:last-child .button, .report-list article > div:last-child .button { width: 100%; }
+  .audit-list > div { align-items: flex-start; }
+  .audit-list > div > div { min-width: 0; }
+
+  .editor-checks, .modal-action-row { align-items: stretch; flex-direction: column; gap: 10px; }
+  .editor-checks label { align-items: flex-start; }
+  .modal-action-row .button { width: 100%; }
+  .resource-reader-meta { flex-wrap: wrap; }
+
+  .info-hero { min-height: 0; align-items: flex-start; flex-direction: column; gap: 13px; padding-block: 27px; }
+  .urgent-card { flex-direction: column; }
+  .urgent-card a { width: 100%; margin-left: 0; }
+  .info-card > button > span { min-width: 0; }
+  .info-card b, .info-card small, .faq-card summary, .faq-card p { overflow-wrap: anywhere; }
+
+  .staff-topbar { align-items: flex-start; }
+  .staff-badge { flex: none; padding-inline: 10px; white-space: nowrap; }
+  .staff-main { min-width: 0; }
+  .staff-facts li { min-width: 0; padding-inline: 14px; }
+  .staff-facts span, .staff-card .auth-security { overflow-wrap: anywhere; }
+
+  .auth-overlay, .auth-dialog, .auth-dialog .auth-card { min-height: 100dvh; }
+  .auth-dialog { width: 100%; }
+  .auth-card, .auth-card form { min-width: 0; }
+  .auth-security { align-items: flex-start; text-align: left; }
+
+  .status-badge, .risk-pill { max-width: 100%; overflow-wrap: anywhere; }
+  .add-tag-row { align-items: stretch; flex-direction: column; }
+  .add-tag-row .button { width: 100%; }
+}
+
+@media (max-width: 360px) {
+  .landing-hero { padding-inline: 14px; }
+  .landing-hero h1 { font-size: 36px; letter-spacing: -1.5px; }
+  .landing-visual { height: 310px; }
+  .landing-float { padding: 10px 11px; transform: scale(.78); }
+  .landing-float.volunteer { transform-origin: left center; }
+  .landing-float.safe { transform-origin: right center; }
+  .mobile-tabbar { padding-inline: 1px; }
+  .mobile-tabbar button { padding-inline: 0; }
+  .mobile-tabbar button span { width: 40px; }
+  .staff-badge { font-size: 11px; }
+  .mood-picker-large { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

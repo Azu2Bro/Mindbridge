@@ -69,6 +69,40 @@ async function clickAdminTab(label) {
   assert.equal(clicked, true, `Expected administration tab “${label}”`)
 }
 
+async function assertMobileLayout(label) {
+  const layout = await evaluate(`(() => {
+    const selectors = [
+      '.landing-nav', '.landing-hero', '.landing-emergency', '.landing-section',
+      '.landing-feature-band', '.landing-resources', '.landing-footer', '.auth-dialog',
+      '.staff-main', '.staff-card', '.topbar', '.page-content', '.page-content > *',
+      '.mobile-tabbar', '.notification-popover', '.support-modal', '.simple-modal'
+    ]
+    const visible = (element) => {
+      const style = getComputedStyle(element)
+      const rect = element.getBoundingClientRect()
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0
+    }
+    const outside = [...document.querySelectorAll(selectors.join(','))]
+      .filter(visible)
+      .map((element) => {
+        const rect = element.getBoundingClientRect()
+        return { selector: element.className || element.tagName, left: Math.round(rect.left), right: Math.round(rect.right) }
+      })
+      .filter((item) => item.left < -1 || item.right > innerWidth + 1)
+    return {
+      viewport: innerWidth,
+      rootWidth: document.documentElement.scrollWidth,
+      bodyWidth: document.body.scrollWidth,
+      outside,
+      volunteerColumns: document.querySelector('.volunteer-card-grid') ? getComputedStyle(document.querySelector('.volunteer-card-grid')).gridTemplateColumns.split(' ').length : 0,
+    }
+  })()`)
+  assert.ok(layout.rootWidth <= layout.viewport + 1, `${label}: root width ${layout.rootWidth}px exceeds ${layout.viewport}px viewport`)
+  assert.ok(layout.bodyWidth <= layout.viewport + 1, `${label}: body width ${layout.bodyWidth}px exceeds ${layout.viewport}px viewport`)
+  assert.deepEqual(layout.outside, [], `${label}: important content is outside the viewport`)
+  if (layout.volunteerColumns) assert.equal(layout.volunteerColumns, 1, `${label}: volunteer cards should use one column on phones`)
+}
+
 try {
   const tabs = await retry(async () => {
     const response = await fetch(`http://127.0.0.1:${debugPort}/json/list`)
@@ -91,8 +125,11 @@ try {
   await waitForText('A gentler way to find someone')
   await waitForText('Call 999')
   await waitForText('Login')
-  await waitForText('tafhimul456@gmail.com')
+  await waitForText('Email our support team')
   assert.equal(await evaluate(`document.querySelector('.landing-footer a[href="mailto:tafhimul456@gmail.com"]') !== null`), true)
+  await send('Emulation.setDeviceMetricsOverride', { width: 320, height: 740, deviceScaleFactor: 1, mobile: true })
+  await assertMobileLayout('landing page at 320px')
+  await send('Emulation.clearDeviceMetricsOverride')
   const landingScreenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })
   await writeFile(join(process.cwd(), 'mentalbridge-landing.png'), Buffer.from(landingScreenshot.data, 'base64'))
   const initialTheme = await evaluate(`document.documentElement.dataset.theme`)
@@ -101,6 +138,9 @@ try {
   assert.equal(await evaluate(`(() => { const button = document.querySelector('.theme-toggle'); if (!button) return false; button.click(); return true })()`), true)
   await clickButton('Login')
   await waitForText('Welcome back')
+  await send('Emulation.setDeviceMetricsOverride', { width: 320, height: 740, deviceScaleFactor: 1, mobile: true })
+  await assertMobileLayout('member sign-in at 320px')
+  await send('Emulation.clearDeviceMetricsOverride')
   assert.equal(await evaluate(`document.querySelector('.demo-login') === null`), true)
   await clickButton('Create an account')
   await waitForText('Bengali and English names are supported')
@@ -117,6 +157,9 @@ try {
   await send('Page.navigate', { url: `${appUrl}/staff` })
   await waitForText('Care operations console')
   await waitForText('Sign in as staff')
+  await send('Emulation.setDeviceMetricsOverride', { width: 320, height: 740, deviceScaleFactor: 1, mobile: true })
+  await assertMobileLayout('staff sign-in at 320px')
+  await send('Emulation.clearDeviceMetricsOverride')
   assert.equal(await evaluate(`document.querySelector('.portal-tabs') === null`), true)
   const staffRejectsMember = await evaluate(`(async () => { const response = await fetch('http://127.0.0.1:3002/api/auth/staff/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'alex@mentalbridge.demo', password: 'Demo123!' }) }); return response.status })()`, true)
   assert.ok([403, 404].includes(staffRejectsMember))
@@ -130,7 +173,7 @@ try {
   await send('Page.reload', { ignoreCache: true })
   await waitForText('Good morning')
 
-  await send('Emulation.setDeviceMetricsOverride', { width: 375, height: 812, deviceScaleFactor: 1, mobile: true })
+  await send('Emulation.setDeviceMetricsOverride', { width: 320, height: 740, deviceScaleFactor: 1, mobile: true })
   await clickAriaLabel('Notifications')
   await waitForText('Mark all read')
   const notificationLayout = await evaluate(`(() => { const panel = document.querySelector('.notification-popover').getBoundingClientRect(); const bell = document.querySelector('.notification-button'); return { left: panel.left, right: panel.right, viewport: innerWidth, display: getComputedStyle(bell).display } })()`)
@@ -139,6 +182,19 @@ try {
   const notificationScreenshot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false })
   await writeFile(join(process.cwd(), 'mentalbridge-notifications-mobile.png'), Buffer.from(notificationScreenshot.data, 'base64'))
   await clickAriaLabel('Close notifications')
+  const mobilePages = ['Home', 'Peer support', 'Messages', 'Community', 'Mood journal', 'Peer volunteers', 'Resources']
+  for (const pageLabel of mobilePages) {
+    assert.equal(await evaluate(`(() => { const button = [...document.querySelectorAll('.main-nav .nav-item')].find((item) => item.textContent.includes(${JSON.stringify(pageLabel)})); if (!button) return false; button.click(); return true })()`), true)
+    await delay(250)
+    await assertMobileLayout(`${pageLabel} at 320px`)
+  }
+  for (const pageLabel of ['Settings', 'Help center']) {
+    assert.equal(await evaluate(`(() => { const button = [...document.querySelectorAll('.sidebar-bottom .nav-item')].find((item) => item.textContent.includes(${JSON.stringify(pageLabel)})); if (!button) return false; button.click(); return true })()`), true)
+    await delay(250)
+    await assertMobileLayout(`${pageLabel} at 320px`)
+  }
+  assert.equal(await evaluate(`(() => { const button = [...document.querySelectorAll('.main-nav .nav-item')].find((item) => item.textContent.includes('Home')); if (!button) return false; button.click(); return true })()`), true)
+  await delay(250)
   await send('Emulation.clearDeviceMetricsOverride')
   const typeScale = await evaluate(`(() => ({ nav: parseFloat(getComputedStyle(document.querySelector('.nav-item')).fontSize), body: parseFloat(getComputedStyle(document.querySelector('.hero-copy > p')).fontSize), button: parseFloat(getComputedStyle(document.querySelector('.button')).fontSize) }))()`)
   assert.ok(typeScale.nav >= 15)
@@ -261,6 +317,10 @@ try {
   await send('Page.reload', { ignoreCache: true })
   await waitForText('Care operations')
   await waitForText('People & roles')
+  await send('Emulation.setDeviceMetricsOverride', { width: 320, height: 740, deviceScaleFactor: 1, mobile: true })
+  await delay(350)
+  await assertMobileLayout('administration dashboard at 320px')
+  await send('Emulation.clearDeviceMetricsOverride')
   await clickAdminTab('People & roles')
   await waitForText('People and platform roles')
   await clickAdminTab('Reports')
