@@ -144,6 +144,16 @@ try {
   assert.equal(await evaluate(`document.querySelector('.demo-login') === null`), true)
   await clickButton('Create an account')
   await waitForText('Bengali and English names are supported')
+  const profileInput = await send('Runtime.evaluate', { expression: `document.querySelector('#profile-picture-input')` })
+  const profileInputNode = await send('DOM.describeNode', { objectId: profileInput.result.objectId })
+  await send('DOM.setFileInputFiles', { files: [join(process.cwd(), 'public', 'resource-mindfulness.jpg')], backendNodeId: profileInputNode.node.backendNodeId })
+  const optimizedPicture = await retry(async () => {
+    const picture = await evaluate(`(() => { const image = document.querySelector('.profile-picture-picker img'); return image ? { source: image.src.slice(0, 30), length: image.src.length } : null })()`)
+    assert.ok(picture)
+    return picture
+  })
+  assert.match(optimizedPicture.source, /^data:image\/webp;base64,/)
+  assert.ok(optimizedPicture.length <= 440000, 'Optimized profile picture must fit the API avatar limit')
   const signupFields = await evaluate(`(() => {
     const alias = document.querySelector('input[placeholder="QuietRiver"]')
     const name = document.querySelector('input[placeholder="Your private name"]')
