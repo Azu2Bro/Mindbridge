@@ -75,7 +75,8 @@ async function assertMobileLayout(label) {
       '.landing-nav', '.landing-hero', '.landing-emergency', '.landing-section',
       '.landing-feature-band', '.landing-resources', '.landing-footer', '.auth-dialog',
       '.staff-main', '.staff-card', '.topbar', '.page-content', '.page-content > *',
-      '.mobile-tabbar', '.notification-popover', '.support-modal', '.simple-modal'
+      '.mobile-tabbar', '.app-footer', '.app-footer-main', '.app-footer-links',
+      '.notification-popover', '.support-modal', '.simple-modal'
     ]
     const visible = (element) => {
       const style = getComputedStyle(element)
@@ -182,6 +183,14 @@ try {
   assert.equal(loggedIn, 'user')
   await send('Page.reload', { ignoreCache: true })
   await waitForText('Good morning')
+
+  const footerState = await evaluate(`(() => ({
+    label: document.querySelector('.app-footer nav')?.getAttribute('aria-label'),
+    support: document.querySelector('.app-footer a[href^="mailto:"]')?.textContent.trim(),
+    emergency: document.querySelector('.app-footer-emergency')?.getAttribute('href'),
+    safety: [...document.querySelectorAll('.app-footer button')].some((button) => button.textContent.includes('Safety & privacy')),
+  }))()`)
+  assert.deepEqual(footerState, { label: 'Support and safety', support: 'Help & support', emergency: 'tel:999', safety: true })
 
   await send('Emulation.setDeviceMetricsOverride', { width: 320, height: 740, deviceScaleFactor: 1, mobile: true })
   await clickAriaLabel('Notifications')

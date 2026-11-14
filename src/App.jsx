@@ -322,8 +322,21 @@ function App() {
         <main className="page-content">{page}</main>
         <MobileTabBar active={active} navigate={navigate} user={user} counts={navCounts} onMore={() => setSidebarOpen(true)} />
         <footer className="app-footer">
-          <span><ShieldCheck size={15} /> Your privacy matters. MentalBridge is a peer-support service, not clinical care.</span>
-          <div><a href="mailto:tafhimul456@gmail.com">Support: tafhimul456@gmail.com</a><a href="tel:999">Bangladesh emergency: 999</a><button onClick={() => navigate('safety')}>Safety & privacy</button></div>
+          <div className="app-footer-main">
+            <div className="app-footer-brand">
+              <span className="app-footer-mark"><HeartHandshake size={19} /></span>
+              <span><b>MentalBridge</b><small>Private peer-support coordination</small></span>
+            </div>
+            <nav className="app-footer-links" aria-label="Support and safety">
+              <a href="mailto:tafhimul456@gmail.com"><CircleHelp size={15} /> Help & support</a>
+              <button onClick={() => navigate('safety')}><ShieldCheck size={15} /> Safety & privacy</button>
+              <a className="app-footer-emergency" href="tel:999"><LifeBuoy size={15} /> Emergency 999</a>
+            </nav>
+          </div>
+          <div className="app-footer-meta">
+            <span>© {new Date().getFullYear()} MentalBridge</span>
+            <span>MentalBridge provides peer support, not clinical or emergency care.</span>
+          </div>
         </footer>
       </div>
       {supportOpen && user.role === 'user' && <SupportModal onClose={() => setSupportOpen(false)} onComplete={() => { setSupportOpen(false); window.dispatchEvent(new CustomEvent('mentalbridge:data')); showToast('Your support request has been shared securely'); navigate('support') }} />}
