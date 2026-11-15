@@ -242,7 +242,7 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     // Also block provisioned staff emails that haven't been set up yet
     const staffEmails = [
       ...String(process.env.INITIAL_ADMIN_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
-      ...String(process.env.INITIAL_MODERATOR_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
+      ...String(process.env.INITIAL_MODERATOR_EMAILS || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
     ]
     if (staffEmails.includes(body.email)) return res.status(403).json({ error: 'This email is reserved for a staff account. Staff members cannot create user accounts. Sign in from the staff portal at /staff.' })
     const user = {
@@ -333,7 +333,7 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
         // Block staff emails from creating user accounts via Google sign-in
         const staffEmails = [
           ...String(process.env.INITIAL_ADMIN_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
-          ...String(process.env.INITIAL_MODERATOR_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
+          ...String(process.env.INITIAL_MODERATOR_EMAILS || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
         ]
         if (staffEmails.includes(identity.email)) {
           const error = new Error('This email is reserved for a staff account. Staff members cannot create user accounts. Sign in from the staff portal at /staff.')

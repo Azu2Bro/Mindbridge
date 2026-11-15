@@ -82,6 +82,8 @@ services:
         sync: false
       - key: INITIAL_VOLUNTEER_EMAILS
         sync: false
+      - key: INITIAL_MODERATOR_EMAILS
+        sync: false
 
       # Optional providers require explicit AI_PROVIDER selection.
       - key: GROQ_API_KEY

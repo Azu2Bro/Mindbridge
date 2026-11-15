@@ -305,7 +305,7 @@ test('urgent language is held for moderator review and never auto-matched', { ti
 
 test('provisioned account activation and pending support without demo volunteers', async (context) => {
   const api = await startTestApi()
-  const prior = { INITIAL_ADMIN_EMAIL: process.env.INITIAL_ADMIN_EMAIL, INITIAL_VOLUNTEER_EMAILS: process.env.INITIAL_VOLUNTEER_EMAILS, ALLOW_DEMO_MATCHES: process.env.ALLOW_DEMO_MATCHES }
+  const prior = { INITIAL_ADMIN_EMAIL: process.env.INITIAL_ADMIN_EMAIL, INITIAL_MODERATOR_EMAILS: process.env.INITIAL_MODERATOR_EMAILS, INITIAL_VOLUNTEER_EMAILS: process.env.INITIAL_VOLUNTEER_EMAILS, ALLOW_DEMO_MATCHES: process.env.ALLOW_DEMO_MATCHES }
   context.after(async () => {
     for (const [key, value] of Object.entries(prior)) { if (value === undefined) delete process.env[key]; else process.env[key] = value }
     await new Promise((resolve) => api.server.close(resolve))
@@ -313,6 +313,7 @@ test('provisioned account activation and pending support without demo volunteers
     await rm(api.directory, { recursive: true, force: true })
   })
   process.env.INITIAL_ADMIN_EMAIL = 'setup-owner@example.com'
+  process.env.INITIAL_MODERATOR_EMAILS = 'setup-moderator@example.com'
   process.env.INITIAL_VOLUNTEER_EMAILS = 'setup-peer@example.com'
   process.env.ALLOW_DEMO_MATCHES = 'false'
   await provisionAccounts(api.store)
@@ -323,6 +324,12 @@ test('provisioned account activation and pending support without demo volunteers
   assert.equal(staff.response.status, 200)
   assert.equal(staff.data.user.role, 'admin')
   assert.equal(staff.data.user.emailVerified, true)
+  const moderatorForgot = await call(api.baseUrl, '/auth/forgot-password', { method: 'POST', body: { email: 'setup-moderator@example.com' } })
+  const moderatorReset = await call(api.baseUrl, '/auth/reset-password', { method: 'POST', body: { token: moderatorForgot.data.resetToken, password: 'SetupModerator123' } })
+  assert.equal(moderatorReset.response.status, 200)
+  const moderator = await call(api.staffBaseUrl, '/auth/staff/login', { method: 'POST', body: { email: 'setup-moderator@example.com', password: 'SetupModerator123' } })
+  assert.equal(moderator.response.status, 200)
+  assert.equal(moderator.data.user.role, 'moderator')
   const login = await call(api.baseUrl, '/auth/login', { method: 'POST', body: { email: 'alex@mentalbridge.demo', password: 'Demo123!' } })
   const token = login.data.token
   assert.deepEqual((await call(api.baseUrl, '/volunteers', { token })).data.volunteers, [])
