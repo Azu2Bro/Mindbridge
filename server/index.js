@@ -507,11 +507,18 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     let requests = data.supportRequests
     if (req.user.role === 'user') requests = requests.filter((request) => request.userId === req.user.id)
     if (req.user.role === 'volunteer') requests = requests.filter((request) => request.volunteerId === req.user.id)
-    requests = requests.map((request) => ({
-      ...request,
-      user: peerVisibleProfile(data.users.find((user) => user.id === request.userId), req.user.id),
-      volunteer: request.volunteerId ? volunteerProfile(data.users.find((user) => user.id === request.volunteerId), request.matchScore) : null,
-    }))
+    requests = requests.map((request) => {
+      const visible = {
+        ...request,
+        user: peerVisibleProfile(data.users.find((user) => user.id === request.userId), req.user.id),
+        volunteer: request.volunteerId ? volunteerProfile(data.users.find((user) => user.id === request.volunteerId), request.matchScore) : null,
+      }
+      if (req.user.role === 'volunteer') {
+        delete visible.description
+        delete visible.sessionNote
+      }
+      return visible
+    })
     res.json({ requests })
   })
 
@@ -568,6 +575,11 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
       if (!item) { const error = new Error('Support request not found'); error.status = 404; throw error }
       if (req.user.role === 'volunteer' && item.volunteerId !== req.user.id) { const error = new Error('This request is not assigned to you'); error.status = 403; throw error }
       if (req.user.role === 'volunteer' && body.volunteerId !== undefined) { const error = new Error('Only moderators and administrators can assign volunteers'); error.status = 403; throw error }
+      if (req.user.role === 'volunteer' && body.sessionNote !== undefined) { const error = new Error('Only moderators and administrators can add coordination notes'); error.status = 403; throw error }
+      if (req.user.role === 'volunteer' && body.status !== undefined) {
+        const allowedTransitions = { assigned: ['in_progress', 'declined'], in_progress: ['completed', 'declined'] }
+        if (!allowedTransitions[item.status]?.includes(body.status)) { const error = new Error('This status change is not available for the assigned volunteer'); error.status = 409; throw error }
+      }
       const previousVolunteerId = item.volunteerId
       Object.assign(item, body, { updatedAt: now() })
       if (body.volunteerId && body.volunteerId !== previousVolunteerId) {
@@ -584,7 +596,9 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
       return item
     })
     app.locals.io?.to(request.userId).emit('notification', { type: 'support', title: 'Your support request was updated' })
-    res.json({ request })
+    const visibleRequest = { ...request }
+    if (req.user.role === 'volunteer') { delete visibleRequest.description; delete visibleRequest.sessionNote }
+    res.json({ request: visibleRequest })
   }))
 
   app.post('/api/support-requests/:requestId/cancel', allowRoles('user'), asyncRoute(async (req, res) => {
