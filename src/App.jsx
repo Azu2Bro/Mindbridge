@@ -349,7 +349,7 @@ const navItemsForRole = (role) => role === 'user'
   ? navItems
   : role === 'volunteer'
     ? navItems.filter((item) => ['support', 'messages', 'community', 'resources'].includes(item.id))
-    : [{ id: 'admin', label: 'Operations', icon: UserCog }, ...navItems.filter((item) => item.id === 'resources')]
+    : [{ id: 'admin', label: 'Operations', icon: UserCog }, ...navItems]
 
 // Phone-sized screens get a thumb-reachable tab bar instead of relying only on the slide-out sidebar.
 function MobileTabBar({ active, navigate, user, counts, onMore }) {
@@ -371,9 +371,7 @@ function MobileTabBar({ active, navigate, user, counts, onMore }) {
 }
 
 function Sidebar({ active, navigate, open, onClose, user, counts }) {
-  const visibleNavItems = user.role === 'user' || user.role === 'volunteer'
-    ? navItemsForRole(user.role)
-    : navItems.filter((item) => item.id === 'resources')
+  const visibleNavItems = navItemsForRole(user.role)
   return (
     <>
       {open && <button className="sidebar-scrim" aria-label="Close menu" onClick={onClose} />}
@@ -403,7 +401,6 @@ function Sidebar({ active, navigate, open, onClose, user, counts }) {
           <button onClick={() => navigate('support')}>Find support <ArrowRight size={15} /></button>
         </div>}
         <div className="sidebar-bottom">
-          {['moderator', 'admin'].includes(user.role) && <button className="nav-item" onClick={() => navigate('admin')}><UserCog size={19} /><span>Care operations</span></button>}
           <button className={`nav-item ${active === 'settings' ? 'active' : ''}`} onClick={() => navigate('settings')}><Settings size={19} /><span>Settings</span></button>
           <button className={`nav-item ${active === 'help' ? 'active' : ''}`} onClick={() => navigate('help')}><CircleHelp size={19} /><span>Help center</span></button>
         </div>

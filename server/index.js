@@ -236,7 +236,15 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
       password: passwordSchema,
       avatarUrl: z.string().regex(/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/).max(450000).optional(),
     }), req.body)
-    if (dataStore.data.users.some((user) => user.email === body.email)) return res.status(409).json({ error: 'An account with this email already exists' })
+    // Block staff emails from registering as regular users
+    const existingStaff = dataStore.data.users.find((item) => item.email === body.email && staffRoles.includes(item.role))
+    if (existingStaff) return res.status(403).json({ error: 'This email is associated with a staff account. Staff members cannot create user accounts. Sign in from the staff portal at /staff.' })
+    // Also block provisioned staff emails that haven't been set up yet
+    const staffEmails = [
+      ...String(process.env.INITIAL_ADMIN_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
+      ...String(process.env.INITIAL_MODERATOR_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
+    ]
+    if (staffEmails.includes(body.email)) return res.status(403).json({ error: 'This email is reserved for a staff account. Staff members cannot create user accounts. Sign in from the staff portal at /staff.' })
     const user = {
       id: id('user'), email: body.email, passwordHash: await bcrypt.hash(body.password, 12), displayName: body.displayName,
       anonymousName: body.anonymousName || `GentleRiver${Math.floor(Math.random() * 900 + 100)}`,
@@ -245,12 +253,14 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     }
     const verificationToken = randomBytes(32).toString('hex')
     const tokenHash = createHash('sha256').update(verificationToken).digest('hex')
-    await dataStore.mutate((data) => {
+    const createdUser = await dataStore.mutate((data) => {
+      if (data.users.some((item) => item.email === user.email)) return null
       data.users.push(user)
       data.emailVerifications.push({ id: id('verify'), userId: user.id, tokenHash, expiresAt: new Date(Date.now() + 24 * 60 * 60000).toISOString(), createdAt: now() })
       data.auditLogs.push({ id: id('audit'), actorId: user.id, action: 'account.registered', createdAt: now() })
       return user
     })
+    if (!createdUser) return res.status(409).json({ error: 'An account with this email already exists' })
     const emailSent = await sendVerificationEmail({ to: user.email, displayName: user.displayName, token: verificationToken, requestOrigin: req.get('origin') }).catch((error) => { console.error('Verification email failed:', error.message); return false })
     res.status(201).json({
       user: publicUser(user), verificationRequired: true, emailSent,
@@ -320,6 +330,16 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
           throw error
         }
       } else {
+        // Block staff emails from creating user accounts via Google sign-in
+        const staffEmails = [
+          ...String(process.env.INITIAL_ADMIN_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
+          ...String(process.env.INITIAL_MODERATOR_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
+        ]
+        if (staffEmails.includes(identity.email)) {
+          const error = new Error('This email is reserved for a staff account. Staff members cannot create user accounts. Sign in from the staff portal at /staff.')
+          error.status = 403
+          throw error
+        }
         user = {
           id: id('user'), email: identity.email, displayName: identity.name.length >= 2 ? identity.name : 'Google Member',
           anonymousName: `GentleRiver${Math.floor(Math.random() * 900 + 100)}`,

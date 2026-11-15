@@ -6,6 +6,7 @@ export async function provisionAccounts(store) {
   const roster = [
     ...String(process.env.INITIAL_VOLUNTEER_EMAILS || '').split(',').filter(Boolean).map((email) => ({ email, role: 'volunteer' })),
     ...(process.env.INITIAL_ADMIN_EMAIL ? [{ email: process.env.INITIAL_ADMIN_EMAIL, role: 'admin' }] : []),
+    ...String(process.env.INITIAL_MODERATOR_EMAIL || '').split(',').filter(Boolean).map((email) => ({ email, role: 'moderator' })),
   ].map((entry) => ({ ...entry, email: entry.email.trim().toLowerCase() }))
   if (!roster.length) return
   if (roster.some(({ email }) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) throw new Error('Invalid provisioning email address')

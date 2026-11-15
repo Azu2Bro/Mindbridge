@@ -534,7 +534,11 @@ body { font-size: 16px; line-height: 1.55; }
 @keyframes staff-drift { 50% { transform: translate3d(0, -26px, 0) scale(1.05); } }
 
 .staff-topbar { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 22px clamp(20px, 5vw, 56px); border-bottom: 1px solid rgba(255,255,255,.08); }
-.staff-brand { display: inline-flex; align-items: center; gap: 11px; color: #fff; text-decoration: none; font-family: 'Manrope', sans-serif; font-size: 20px; font-weight: 800; letter-spacing: -.5px; }
+.staff-brand { display: inline-flex; align-items: center; gap: 11px; padding: 0; border: none; background: none; color: #fff; text-decoration: none; font-family: 'Manrope', sans-serif; font-size: 20px; font-weight: 800; letter-spacing: -.5px; cursor: pointer; }
+.staff-reset-sent { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 24px 0 8px; text-align: center; }
+.staff-reset-sent svg { color: var(--green-2, #2c775c); }
+.staff-reset-sent p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.7; }
+.staff-reset-sent b { color: var(--ink); }
 .staff-brand > span:last-child span { color: #f09973; }
 .staff-badge { display: inline-flex; align-items: center; gap: 7px; padding: 8px 13px; border: 1px solid rgba(240,153,115,.4); border-radius: 999px; color: #ffbc9e; background: rgba(236,129,95,.12); font-size: 12.5px; font-weight: 700; letter-spacing: .4px; }
 

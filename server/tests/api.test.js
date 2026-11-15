@@ -71,6 +71,24 @@ test('signup accepts Bengali names, common punctuation, and a blank optional ali
   assert.equal(invalidAlias.data.error, 'Anonymous name can contain letters, numbers, spaces, periods, apostrophes, underscores, and hyphens')
 })
 
+test('concurrent signup requests cannot create duplicate email accounts', async (context) => {
+  const api = await startTestApi()
+  context.after(async () => {
+    await new Promise((resolve) => api.server.close(resolve))
+    await new Promise((resolve) => api.staffServer.close(resolve))
+    await rm(api.directory, { recursive: true, force: true })
+  })
+
+  const body = { displayName: 'Duplicate Check', email: 'duplicate@example.com', password: 'StrongPass1' }
+  const results = await Promise.all([
+    call(api.baseUrl, '/auth/register', { method: 'POST', body }),
+    call(api.baseUrl, '/auth/register', { method: 'POST', body }),
+  ])
+
+  assert.deepEqual(results.map(({ response }) => response.status).sort(), [201, 409])
+  assert.equal(api.store.data.users.filter((user) => user.email === body.email).length, 1)
+})
+
 test('Google login creates members without granting access to staff accounts', async (context) => {
   const identities = {
     member: { sub: 'google-member-1', email: 'google.member@example.com', name: 'Google Member' },
