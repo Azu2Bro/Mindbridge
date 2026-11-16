@@ -1207,14 +1207,25 @@ function AdminView({ showToast, user }) {
     } catch (requestError) { setError(requestError.message) }
   }
   useEffect(() => { load() }, [])
-  const updateReport = async (reportId, status) => { setBusy(reportId); try { await api.updateReport(reportId, status); await load(); showToast('Report updated') } catch (requestError) { showToast(requestError.message) } finally { setBusy('') } }
   const removeReportedPost = async (reportId, postId) => {
     setBusy(reportId || postId)
     try {
       if (postId) await api.moderatePost(postId, { removed: true })
       if (reportId) await api.updateReport(reportId, 'resolved')
       await load()
-      showToast('Reported post removed and report resolved')
+      showToast('Violating post removed')
+    } catch (requestError) {
+      showToast(requestError.message)
+    } finally {
+      setBusy('')
+    }
+  }
+  const keepReportedPost = async (reportId) => {
+    setBusy(reportId)
+    try {
+      await api.updateReport(reportId, 'dismissed')
+      await load()
+      showToast('Post kept (report dismissed)')
     } catch (requestError) {
       showToast(requestError.message)
     } finally {
@@ -1226,7 +1237,7 @@ function AdminView({ showToast, user }) {
     try {
       await api.deleteReport(reportId)
       await load()
-      showToast('Report removed')
+      showToast('Report cleared')
     } catch (requestError) {
       showToast(requestError.message)
     } finally {
@@ -1272,7 +1283,42 @@ function AdminView({ showToast, user }) {
   return <div className="admin-layout">{error && <InlineError message={error} onRetry={load} />}<div className="admin-stats"><StatCard icon={Users} label="Active accounts" value={data.stats.activeUsers} trend="Verified platform access" color="sage" /><StatCard icon={HeartHandshake} label="Volunteer applications" value={data.applications.filter((item) => item.status === 'pending').length} trend="Awaiting review" color="coral" /><StatCard icon={UserRoundCheck} label="Supporters online" value={data.stats.supportersOnline} trend="Available now" color="blue" /><StatCard icon={Flag} label="Open reports" value={data.stats.openReports} trend="Awaiting review" color="gold" /></div><div className="admin-tabs"><button className={tab === 'reports' ? 'active' : ''} onClick={() => setTab('reports')}>Reports ({data.reports.filter((item) => item.status === 'open').length})</button><button className={tab === 'users' ? 'active' : ''} onClick={() => setTab('users')}>People & roles</button><button className={tab === 'applications' ? 'active' : ''} onClick={() => setTab('applications')}>Volunteer applications ({data.applications.filter((item) => item.status === 'pending').length})</button><button className={tab === 'posts' ? 'active' : ''} onClick={() => setTab('posts')}>Community posts</button><button className={tab === 'resources' ? 'active' : ''} onClick={() => setTab('resources')}>Resources</button><button className={tab === 'analytics' ? 'active' : ''} onClick={() => setTab('analytics')}>Analytics</button>{user.role === 'admin' && <button className={tab === 'activity' ? 'active' : ''} onClick={() => setTab('activity')}>Audit log</button>}<button type="button" className="text-button" style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--muted)', padding: '0 8px', border: 0, background: 'none', cursor: 'pointer' }} onClick={() => setNoticeOpen(true)} title="View workspace restrictions"><ShieldCheck size={14} /> Workspace note</button></div>
     {noticeOpen && <SimpleModal title="Restricted care-operations workspace" onClose={closeNotice}><div style={{ display: 'grid', gap: 14 }}><p style={{ margin: 0, fontSize: 15, lineHeight: 1.6, color: 'var(--ink)' }}>Signed in as <b>{user.role}</b>. Staff accounts manage the platform and cannot create support requests or community posts.</p><div className="modal-action-row" style={{ marginTop: 12 }}><button className="button button-dark" onClick={closeNotice}>Understood</button></div></div></SimpleModal>}
     {tab === 'applications' && <section className="admin-panel"><div className="section-heading"><div><span className="eyebrow">VOLUNTEER REVIEW</span><h2>Volunteer applications</h2></div></div><div className="request-card-list">{data.applications.map((application) => <article className="request-card" key={application.id}><div className="request-card-head"><div><h3>{application.name}</h3><small>{application.email} · {new Date(application.createdAt).toLocaleString()}</small></div><span className="status-badge">{application.status}</span></div><p><b>Experience:</b> {application.experience}</p><p><b>Motivation:</b> {application.motivation}</p>{application.status === 'pending' && <div className="admin-assignment"><button className="button button-dark" disabled={busy === application.id} onClick={() => updateApplication(application.id, 'approved')}>Approve as volunteer</button><button className="button button-secondary" disabled={busy === application.id} onClick={() => updateApplication(application.id, 'rejected')}>Reject</button></div>}</article>)}{!data.applications.length && <p className="empty-copy">No volunteer applications yet.</p>}</div></section>}
-    {tab === 'reports' && <section className="admin-panel"><div className="section-heading"><div><span className="eyebrow">MODERATION</span><h2>Reported content</h2><p>Moderators and administrators review reports and can remove violating posts directly.</p></div></div><div className="report-list">{data.reports.map((report) => { const targetPost = data.posts.find((post) => post.id === report.targetId); return <article key={report.id}><div><b>{targetPost?.title || `${report.targetType} report`}</b><span className="status-badge">{report.category || 'other'} · {report.status}</span></div>{targetPost && <p style={{ color: 'var(--muted)', fontSize: 13, fontStyle: 'italic', margin: '4px 0 8px' }}>“{targetPost.body?.slice(0, 160)}{targetPost.body?.length > 160 ? '…' : ''}”</p>}<p><b>Report reason:</b> {report.reason}</p><small>{new Date(report.createdAt).toLocaleString()}</small><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>{report.status === 'open' && <button className="button button-secondary" disabled={busy === report.id} onClick={() => updateReport(report.id, 'reviewing')}>Review</button>}{report.status !== 'resolved' && <button className="button button-dark" disabled={busy === report.id} onClick={() => updateReport(report.id, 'resolved')}>Mark resolved</button>}{targetPost && !targetPost.removed ? <button className="button button-danger" disabled={busy === report.id || busy === targetPost.id} onClick={() => removeReportedPost(report.id, targetPost.id)}><Trash2 size={14} /> Remove post</button> : targetPost && targetPost.removed ? <span className="status-badge" style={{ background: 'var(--coral-light)', color: 'var(--coral)' }}>Post removed</span> : null}{report.status !== 'dismissed' && <button className="text-button" disabled={busy === report.id} onClick={() => updateReport(report.id, 'dismissed')}>Dismiss</button>}<button className="text-button danger" disabled={busy === report.id} onClick={() => deleteReport(report.id)} title="Delete report record"><Trash2 size={13} /> Delete report</button></div></article> })}{!data.reports.length && <p className="empty-copy">No content reports have been submitted.</p>}</div></section>}
+    {tab === 'reports' && <section className="admin-panel"><div className="section-heading"><div><span className="eyebrow">MODERATION</span><h2>Reported content</h2><p>Review reports and decide whether to remove the violating post or keep it.</p></div></div><div className="report-list">{data.reports.map((report) => {
+      const targetPost = data.posts.find((post) => post.id === report.targetId)
+      const isPostRemoved = targetPost ? Boolean(targetPost.removed) : report.status === 'resolved'
+      const isKept = report.status === 'dismissed' && !isPostRemoved
+      const isPending = !isPostRemoved && !isKept
+      return <article key={report.id}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+          <b>{targetPost?.title || `${report.targetType} report`}</b>
+          <span className="status-badge" style={isPostRemoved ? { background: 'var(--coral-light)', color: 'var(--coral)' } : isKept ? { background: 'var(--sage-light)', color: 'var(--sage-dark)' } : undefined}>
+            {isPostRemoved ? 'Post removed' : isKept ? 'Kept (No violation)' : 'Needs review'}
+          </span>
+        </div>
+        {targetPost && <p style={{ color: 'var(--muted)', fontSize: 13, fontStyle: 'italic', margin: '4px 0 8px' }}>“{targetPost.body?.slice(0, 160)}{targetPost.body?.length > 160 ? '…' : ''}”</p>}
+        <p><b>Report reason:</b> {report.reason}</p>
+        <small>{new Date(report.createdAt).toLocaleString()}</small>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 12 }}>
+          {isPending && (
+            <>
+              {targetPost && !targetPost.removed && (
+                <button className="button button-danger" disabled={busy === report.id || busy === targetPost.id} onClick={() => removeReportedPost(report.id, targetPost.id)}>
+                  <Trash2 size={14} /> Remove post
+                </button>
+              )}
+              <button className="button button-secondary" disabled={busy === report.id} onClick={() => keepReportedPost(report.id)}>
+                <Check size={14} /> Keep post
+              </button>
+            </>
+          )}
+          {!isPending && (
+            <button className="text-button danger" disabled={busy === report.id} onClick={() => deleteReport(report.id)} title="Clear report record">
+              <Trash2 size={13} /> Clear report
+            </button>
+          )}
+        </div>
+      </article>
+    })}{!data.reports.length && <p className="empty-copy">No content reports have been submitted.</p>}</div></section>}
     {tab === 'users' && <section className="admin-panel"><div className="section-heading"><div><span className="eyebrow">ACCESS MANAGEMENT</span><h2>People and platform roles</h2><p>Administrators assign moderators. Administrators and moderators can appoint verified volunteers.</p></div>{user.role === 'admin' && data.users.some((item) => item.email?.endsWith('@mentalbridge.demo')) && <button className="button button-danger" disabled={busy === 'purge-demo'} onClick={purgeDemoData}><Trash2 size={15} /> Remove sample accounts</button>}</div><div className="user-table">{data.users.map((item) => { const protectedFromModerator = user.role === 'moderator' && ['moderator', 'admin'].includes(item.role); return <div key={item.id}><span className="avatar" style={{ background: item.avatarColor }}>{item.displayName.slice(0, 2).toUpperCase()}</span><div><b>{item.displayName}</b><small>{item.email || `@${item.anonymousName}`} · {item.emailVerified ? 'Email verified' : 'Awaiting email verification'}</small></div><select aria-label={`Role for ${item.displayName}`} value={item.role} disabled={item.id === user.id || item.role === 'admin' || protectedFromModerator || busy === item.id} onChange={(event) => updateRole(item.id, event.target.value)}><option value="user">Member</option><option value="volunteer">Volunteer</option>{user.role === 'admin' && <option value="moderator">Moderator</option>}{item.role === 'admin' && <option value="admin">Administrator</option>}</select><span className="status-badge">{item.status}</span>{item.id !== user.id && item.role !== 'admin' && !protectedFromModerator && <button className="button button-secondary" disabled={busy === item.id} onClick={() => updateUser(item.id, item.status === 'active' ? 'suspended' : 'active')}>{item.status === 'active' ? 'Suspend' : 'Activate'}</button>}{user.role === 'admin' && item.id !== user.id && item.role !== 'admin' && <button className="button button-danger" disabled={busy === item.id} onClick={() => deleteUser(item)} title="Delete user"><Trash2 size={15} /> Remove</button>}</div> })}</div></section>}
     {tab === 'posts' && <section className="admin-panel"><div className="section-heading"><div><span className="eyebrow">COMMUNITY CONTROL</span><h2>Community posts</h2></div></div><div className="management-list">{data.posts.map((post) => <article key={post.id} className={post.removed ? 'removed-item' : ''}><div><span className="category-tag">{post.category}</span><span className="status-badge">{post.removed ? 'removed' : post.locked ? 'locked' : 'live'}</span></div><h3>{post.title}</h3><p>{post.body}</p><small>Anonymous author: {post.author} · {new Date(post.createdAt).toLocaleString()}</small><div><button className="button button-secondary" disabled={busy === post.id || post.removed} onClick={() => moderatePost(post.id, { locked: !post.locked })}>{post.locked ? 'Unlock' : 'Lock'} discussion</button><button className="button button-secondary" disabled={busy === post.id || post.removed} onClick={() => moderatePost(post.id, { pinned: !post.pinned })}>{post.pinned ? 'Unpin' : 'Pin'} post</button><button className={post.removed ? 'button button-secondary' : 'button button-danger'} disabled={busy === post.id} onClick={() => moderatePost(post.id, { removed: !post.removed })}>{post.removed ? 'Restore post' : 'Remove post'}</button></div></article>)}{!data.posts.length && <p className="empty-copy">No community posts yet.</p>}</div></section>}
     {tab === 'resources' && <section className="admin-panel"><div className="section-heading"><div><span className="eyebrow">RESOURCE LIBRARY</span><h2>Educational resources</h2><p>Both administrators and moderators can create, edit, publish, and unpublish resources.</p></div><button className="button button-dark" onClick={() => setResourceEditor({ title: '', description: '', content: '', category: 'Self-care', type: '5 min read', icon: 'BookOpen', color: 'sage', featured: false, published: true })}><Plus size={16} /> Add resource</button></div><div className="management-list resource-management-list">{data.resources.map((resource) => <article key={resource.id}><div><span className="category-tag">{resource.category}</span><span className="status-badge">{resource.published ? 'published' : 'draft'}</span></div><h3>{resource.title}</h3><p>{resource.description}</p><div><button className="button button-secondary" onClick={() => setResourceEditor({ ...resource })}><Edit3 size={15} /> Edit</button><button className="button button-secondary" disabled={busy === resource.id} onClick={() => saveResource({ ...resource, published: !resource.published })}>{resource.published ? 'Unpublish' : 'Publish'}</button>{user.role === 'admin' && <button className="button button-danger" disabled={busy === resource.id} onClick={() => deleteResource(resource)}><Trash2 size={15} /> Remove</button>}</div></article>)}{!data.resources.length && <p className="empty-copy">No resources have been created.</p>}</div></section>}
