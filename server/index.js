@@ -261,7 +261,7 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
       ...String(process.env.INITIAL_MODERATOR_EMAILS || process.env.INITIAL_MODERATOR_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
     ]
     if (staffEmails.includes(body.email.toLowerCase())) {
-      return res.status(403).json({ error: 'Staff members cannot apply as volunteers using a staff email address.' })
+      return res.status(409).json({ error: 'This email is not eligible for peer volunteer registration' })
     }
 
     if (dataStore.data.volunteerApplications.some((item) => item.email.toLowerCase() === body.email.toLowerCase() && ['pending', 'approved'].includes(item.status))) {
@@ -389,13 +389,13 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     }), req.body)
     // Block staff emails from registering as regular users
     const existingStaff = dataStore.data.users.find((item) => item.email === body.email && staffRoles.includes(item.role))
-    if (existingStaff) return res.status(403).json({ error: 'This email is associated with a staff account. Staff members cannot create user accounts. Sign in from the staff portal at /staff.' })
+    if (existingStaff) return res.status(409).json({ error: 'An account with this email already exists' })
     // Also block provisioned staff emails that haven't been set up yet
     const staffEmails = [
       ...String(process.env.INITIAL_ADMIN_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
       ...String(process.env.INITIAL_MODERATOR_EMAILS || process.env.INITIAL_MODERATOR_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
     ]
-    if (staffEmails.includes(body.email)) return res.status(403).json({ error: 'This email is reserved for a staff account. Staff members cannot create user accounts. Sign in from the staff portal at /staff.' })
+    if (staffEmails.includes(body.email)) return res.status(409).json({ error: 'An account with this email already exists' })
     const user = {
       id: id('user'), email: body.email, passwordHash: await bcrypt.hash(body.password, 12), displayName: body.displayName,
       anonymousName: body.anonymousName || `GentleRiver${Math.floor(Math.random() * 900 + 100)}`,
@@ -442,11 +442,13 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     return user
   }
 
-  // Member portal: members and volunteers only. Staff accounts are pushed to their own portal.
+  // Member portal: members and volunteers only.
   app.post('/api/auth/login', asyncRoute(async (req, res) => {
     const user = await authenticate(req, res)
     if (!user) return
-    if (staffRoles.includes(user.role)) return res.status(403).json({ error: 'This is a staff account. Sign in from the staff portal at /staff.', staffPortal: true })
+    if (staffRoles.includes(user.role)) {
+      return res.status(403).json({ error: 'This account cannot sign in from here. Please verify your credentials or contact support.' })
+    }
     res.json({ token: signToken(user), user: publicUser(user) })
   }))
 
@@ -470,9 +472,8 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
           throw error
         }
         if (staffRoles.includes(user.role)) {
-          const error = new Error('This is a staff account. Sign in from the staff portal at /staff.')
+          const error = new Error('This account cannot sign in from here. Please verify your credentials or contact support.')
           error.status = 403
-          error.staffPortal = true
           throw error
         }
         if (user.googleSub && user.googleSub !== identity.sub) {
@@ -487,7 +488,7 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
           ...String(process.env.INITIAL_MODERATOR_EMAILS || process.env.INITIAL_MODERATOR_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
         ]
         if (staffEmails.includes(identity.email)) {
-          const error = new Error('This email is reserved for a staff account. Staff members cannot create user accounts. Sign in from the staff portal at /staff.')
+          const error = new Error('This account cannot sign in from here. Please verify your credentials or contact support.')
           error.status = 403
           throw error
         }
@@ -1220,7 +1221,6 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     console.error(error)
     res.status(error.status || 500).json({
       error: error.status ? error.message : 'Something went wrong on the server',
-      ...(error.staffPortal ? { staffPortal: true } : {}),
     })
   })
   return app

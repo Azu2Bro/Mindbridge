@@ -174,8 +174,8 @@ try {
   assert.equal(await evaluate(`document.querySelector('.portal-tabs') === null`), true)
   const staffRejectsMember = await evaluate(`(async () => { const response = await fetch('http://127.0.0.1:3002/api/auth/staff/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'alex@mentalbridge.demo', password: 'Demo123!' }) }); return response.status })()`, true)
   assert.ok([403, 404].includes(staffRejectsMember))
-  const memberRejectsStaff = await evaluate(`(async () => { const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'admin@mentalbridge.demo', password: 'Demo123!' }) }); const data = await response.json(); return { status: response.status, staffPortal: data.staffPortal } })()`, true)
-  assert.deepEqual(memberRejectsStaff, { status: 403, staffPortal: true })
+  const memberRejectsStaff = await evaluate(`(async () => { const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'admin@mentalbridge.demo', password: 'Demo123!' }) }); const data = await response.json(); return { status: response.status, staffPortal: Boolean(data.staffPortal) } })()`, true)
+  assert.deepEqual(memberRejectsStaff, { status: 403, staffPortal: false })
   await send('Page.navigate', { url: appUrl })
   await waitForText('A gentler way to find someone')
 

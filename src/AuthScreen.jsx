@@ -13,7 +13,6 @@ export default function AuthScreen({ initialMode = 'login', onClose }) {
   const urlResetToken = params.get('reset') || ''
   const urlVerificationToken = params.get('verify') || ''
   const [mode, setMode] = useState(urlResetToken ? 'reset' : urlVerificationToken ? 'verifying' : initialMode)
-  const [staffHint, setStaffHint] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(Boolean(urlVerificationToken))
   const [error, setError] = useState('')
@@ -33,13 +32,12 @@ export default function AuthScreen({ initialMode = 'login', onClose }) {
   }, [urlVerificationToken])
 
   const update = (key) => (event) => setForm({ ...form, [key]: event.target.value })
-  const changeMode = (nextMode) => { clearTokens(); setMode(nextMode); setError(''); setNotice(''); setVerificationToken(''); setStaffHint(false) }
+  const changeMode = (nextMode) => { clearTokens(); setMode(nextMode); setError(''); setNotice(''); setVerificationToken('') }
   const submit = async (event) => {
     event.preventDefault()
     setLoading(true)
     setError('')
     setNotice('')
-    setStaffHint(false)
     try {
       if (mode === 'login') { await login({ email: form.email, password: form.password }); onClose?.() }
       else if (mode === 'register') {
@@ -79,7 +77,7 @@ export default function AuthScreen({ initialMode = 'login', onClose }) {
         setMode('login')
         setNotice('Your password has been changed. You can login now.')
       }
-    } catch (submitError) { setError(submitError.message); setStaffHint(Boolean(submitError.details?.staffPortal)); if (submitError.details?.verificationRequired) setMode('pending') }
+    } catch (submitError) { setError(submitError.message); if (submitError.details?.verificationRequired) setMode('pending') }
     finally { setLoading(false) }
   }
 
@@ -101,9 +99,9 @@ export default function AuthScreen({ initialMode = 'login', onClose }) {
   }
 
   const handleGoogleCredential = async (credential) => {
-    setLoading(true); setError(''); setNotice(''); setStaffHint(false)
+    setLoading(true); setError(''); setNotice('')
     try { await googleLogin(credential); onClose?.() }
-    catch (requestError) { setError(requestError.message); setStaffHint(Boolean(requestError.details?.staffPortal)) }
+    catch (requestError) { setError(requestError.message) }
     finally { setLoading(false) }
   }
 
@@ -132,7 +130,7 @@ export default function AuthScreen({ initialMode = 'login', onClose }) {
           {!['forgot', 'resend'].includes(mode) && <label className="auth-field"><span>{mode === 'reset' ? 'New password' : mode === 'volunteerApply' ? 'Create a password' : 'Password'}</span><div><input type={showPassword ? 'text' : 'password'} required minLength={8} value={form.password} onChange={update('password')} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} /><button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div></label>}
           {['register', 'reset', 'volunteerApply'].includes(mode) && <div className="password-hint"><LockKeyhole size={14} /> Use 8+ characters with an uppercase letter and number.</div>}
           {mode === 'login' && <button type="button" className="forgot-link" onClick={() => changeMode('forgot')}>Forgot your password?</button>}
-          {error && <div className="auth-error" role="alert">{error}{staffHint && <a className="auth-error-link" href="/staff">Go to the staff portal <ArrowRight size={13} /></a>}</div>}
+          {error && <div className="auth-error" role="alert">{error}</div>}
           {notice && <div className="auth-notice" role="status">{notice}</div>}
           <button className="button button-dark auth-submit" disabled={loading}>{loading ? <><LoaderCircle className="spin" size={17} /> Please wait…</> : <>{mode === 'login' ? 'Login' : mode === 'register' ? 'Create & verify account' : mode === 'volunteerApply' ? 'Submit application' : mode === 'resend' ? 'Send verification link' : mode === 'forgot' ? 'Send reset link' : 'Save new password'} <ArrowRight size={17} /></>}</button>
           {['login', 'register'].includes(mode) && <><div className="auth-divider"><span>or continue with</span></div><GoogleSignInButton onCredential={handleGoogleCredential} disabled={loading} /></>}

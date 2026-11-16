@@ -118,7 +118,8 @@ test('Google login creates members without granting access to staff accounts', a
 
   const adminOnMemberPortal = await call(api.baseUrl, '/auth/google', { method: 'POST', body: { credential: 'admin' } })
   assert.equal(adminOnMemberPortal.response.status, 403)
-  assert.equal(adminOnMemberPortal.data.staffPortal, true)
+  assert.equal('staffPortal' in adminOnMemberPortal.data, false)
+  assert.match(adminOnMemberPortal.data.error, /cannot sign in from here/i)
 
 })
 
@@ -247,7 +248,8 @@ test('complete member and administration workflow', { timeout: 90000 }, async (c
 
   const adminMemberPortal = await call(api.baseUrl, '/auth/login', { method: 'POST', body: { email: 'admin@mentalbridge.demo', password: 'Demo123!' } })
   assert.equal(adminMemberPortal.response.status, 403)
-  assert.equal(adminMemberPortal.data.staffPortal, true)
+  assert.equal('staffPortal' in adminMemberPortal.data, false)
+  assert.match(adminMemberPortal.data.error, /cannot sign in from here/i)
   const memberOnStaffPortal = await call(api.staffBaseUrl, '/auth/staff/login', { method: 'POST', body: { email: 'alex@mentalbridge.demo', password: 'Demo123!' } })
   assert.equal(memberOnStaffPortal.response.status, 403)
   const adminLogin = await call(api.staffBaseUrl, '/auth/staff/login', { method: 'POST', body: { email: 'admin@mentalbridge.demo', password: 'Demo123!' } })
