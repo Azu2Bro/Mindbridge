@@ -249,13 +249,134 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
   app.get('/api/auth/google/config', (req, res) => res.json({ enabled: googleIdentityEnabled(), clientId: process.env.GOOGLE_CLIENT_ID || null }))
   app.post('/api/volunteer-applications', asyncRoute(async (req, res) => {
     const body = parse(z.object({
-      name: z.string().trim().min(2).max(70), email: emailSchema,
-      experience: z.string().trim().min(20).max(1200), motivation: z.string().trim().min(20).max(1200),
+      name: z.string().trim().min(2).max(70),
+      email: emailSchema,
+      password: passwordSchema.optional(),
+      experience: z.string().trim().min(20).max(1200),
+      motivation: z.string().trim().min(20).max(1200),
     }), req.body)
-    if (dataStore.data.volunteerApplications.some((item) => item.email === body.email && ['pending', 'approved'].includes(item.status))) return res.status(409).json({ error: 'An application is already active for this email' })
-    const application = { id: id('volunteer-application'), ...body, userId: null, status: 'pending', createdAt: now() }
-    await dataStore.mutate((data) => { data.volunteerApplications.push(application); return application })
-    res.status(201).json({ message: 'Your volunteer application was sent for moderator review.' })
+
+    const staffEmails = [
+      ...String(process.env.INITIAL_ADMIN_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
+      ...String(process.env.INITIAL_MODERATOR_EMAILS || process.env.INITIAL_MODERATOR_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
+    ]
+    if (staffEmails.includes(body.email.toLowerCase())) {
+      return res.status(403).json({ error: 'Staff members cannot apply as volunteers using a staff email address.' })
+    }
+
+    if (dataStore.data.volunteerApplications.some((item) => item.email.toLowerCase() === body.email.toLowerCase() && ['pending', 'approved'].includes(item.status))) {
+      return res.status(409).json({ error: 'An application is already active for this email' })
+    }
+
+    let user = dataStore.data.users.find((item) => item.email?.toLowerCase() === body.email.toLowerCase())
+    let verificationToken = null
+    let emailSent = false
+
+    if (!user) {
+      const password = body.password || randomBytes(16).toString('hex')
+      const passwordHash = await bcrypt.hash(password, 12)
+      verificationToken = randomBytes(32).toString('hex')
+      const tokenHash = createHash('sha256').update(verificationToken).digest('hex')
+
+      const newUser = {
+        id: id('user'),
+        displayName: body.name,
+        anonymousName: `Peer${randomBytes(4).toString('hex')}`,
+        email: body.email,
+        passwordHash,
+        role: 'user',
+        status: 'active',
+        emailVerified: false,
+        createdAt: now(),
+        avatarColor: '#5e9779',
+        bookmarks: [],
+        postBookmarks: [],
+        privacy: { showOnline: true, allowReminders: true },
+        availability: 'unavailable',
+        expertise: ['Emotional support'],
+        bio: 'Peer supporter assigned by the MentalBridge care team.',
+      }
+
+      await dataStore.mutate((data) => {
+        data.users.push(newUser)
+        data.emailVerifications = (data.emailVerifications || []).filter((item) => item.userId !== newUser.id)
+        data.emailVerifications.push({
+          id: id('verify'),
+          userId: newUser.id,
+          tokenHash,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60000).toISOString(),
+          createdAt: now(),
+        })
+        const application = {
+          id: id('volunteer-application'),
+          name: body.name,
+          email: body.email,
+          experience: body.experience,
+          motivation: body.motivation,
+          userId: newUser.id,
+          status: 'pending',
+          createdAt: now(),
+        }
+        data.volunteerApplications.push(application)
+        data.auditLogs.push({ id: id('audit'), actorId: newUser.id, action: 'volunteer.applied', targetId: application.id, createdAt: now() })
+        return application
+      })
+      user = newUser
+    } else {
+      if (!user.emailVerified) {
+        verificationToken = randomBytes(32).toString('hex')
+        const tokenHash = createHash('sha256').update(verificationToken).digest('hex')
+        await dataStore.mutate((data) => {
+          data.emailVerifications = (data.emailVerifications || []).filter((item) => item.userId !== user.id)
+          data.emailVerifications.push({
+            id: id('verify'),
+            userId: user.id,
+            tokenHash,
+            expiresAt: new Date(Date.now() + 24 * 60 * 60000).toISOString(),
+            createdAt: now(),
+          })
+          return true
+        })
+      }
+      await dataStore.mutate((data) => {
+        const application = {
+          id: id('volunteer-application'),
+          name: body.name,
+          email: body.email,
+          experience: body.experience,
+          motivation: body.motivation,
+          userId: user.id,
+          status: 'pending',
+          createdAt: now(),
+        }
+        data.volunteerApplications.push(application)
+        data.auditLogs.push({ id: id('audit'), actorId: user.id, action: 'volunteer.applied', targetId: application.id, createdAt: now() })
+        return application
+      })
+    }
+
+    if (verificationToken) {
+      emailSent = await sendVerificationEmail({
+        to: user.email,
+        displayName: user.displayName,
+        token: verificationToken,
+        requestOrigin: req.get('origin'),
+      }).catch((error) => {
+        console.error('Volunteer verification email failed:', error.message)
+        return false
+      })
+    }
+
+    res.status(201).json({
+      message: user.emailVerified
+        ? 'Your volunteer application was sent for moderator review.'
+        : emailSent
+          ? 'Application received! Please check your email to verify your address.'
+          : 'Application received. Please check your email to verify your address.',
+      verificationRequired: !user.emailVerified,
+      emailSent,
+      ...(process.env.NODE_ENV !== 'production' && !process.env.SMTP_HOST && verificationToken && !emailSent ? { verificationToken } : {}),
+    })
   }))
 
   app.post('/api/auth/register', asyncRoute(async (req, res) => {
@@ -506,11 +627,53 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
   }))
   app.post('/api/users/me/volunteer-application', allowRoles('user'), asyncRoute(async (req, res) => {
     const body = parse(z.object({ experience: z.string().trim().min(20).max(1200), motivation: z.string().trim().min(20).max(1200) }), req.body)
-    const existing = dataStore.data.volunteerApplications.find((item) => item.userId === req.user.id && ['pending', 'approved'].includes(item.status))
+    const existing = dataStore.data.volunteerApplications.find((item) => (item.userId === req.user.id || item.email?.toLowerCase() === req.user.email?.toLowerCase()) && ['pending', 'approved'].includes(item.status))
     if (existing) return res.status(409).json({ error: 'You already have an active volunteer application' })
     const application = { id: id('volunteer-application'), name: req.user.displayName, email: req.user.email, userId: req.user.id, ...body, status: 'pending', createdAt: now() }
-    await dataStore.mutate((data) => { data.volunteerApplications.push(application); return application })
-    res.status(201).json({ message: 'Your volunteer application was sent for moderator review.' })
+    let verificationToken = null
+    let emailSent = false
+    if (!req.user.emailVerified) {
+      verificationToken = randomBytes(32).toString('hex')
+      const tokenHash = createHash('sha256').update(verificationToken).digest('hex')
+      await dataStore.mutate((data) => {
+        data.emailVerifications = (data.emailVerifications || []).filter((item) => item.userId !== req.user.id)
+        data.emailVerifications.push({
+          id: id('verify'),
+          userId: req.user.id,
+          tokenHash,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60000).toISOString(),
+          createdAt: now(),
+        })
+        data.volunteerApplications.push(application)
+        data.auditLogs.push({ id: id('audit'), actorId: req.user.id, action: 'volunteer.applied', targetId: application.id, createdAt: now() })
+        return application
+      })
+      emailSent = await sendVerificationEmail({
+        to: req.user.email,
+        displayName: req.user.displayName,
+        token: verificationToken,
+        requestOrigin: req.get('origin'),
+      }).catch((error) => {
+        console.error('Volunteer verification email failed:', error.message)
+        return false
+      })
+    } else {
+      await dataStore.mutate((data) => {
+        data.volunteerApplications.push(application)
+        data.auditLogs.push({ id: id('audit'), actorId: req.user.id, action: 'volunteer.applied', targetId: application.id, createdAt: now() })
+        return application
+      })
+    }
+    res.status(201).json({
+      message: req.user.emailVerified
+        ? 'Your volunteer application was sent for moderator review.'
+        : emailSent
+          ? 'Application received! Please check your email to verify your address.'
+          : 'Application received. Please check your email to verify your address.',
+      verificationRequired: !req.user.emailVerified,
+      emailSent,
+      ...(process.env.NODE_ENV !== 'production' && !process.env.SMTP_HOST && verificationToken && !emailSent ? { verificationToken } : {}),
+    })
   }))
 
   app.get('/api/dashboard', allowRoles('user'), (req, res) => {
@@ -936,17 +1099,35 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     const users = dataStore.data.users.map((user) => ({ ...publicUser(user), email: req.user.role === 'admin' ? user.email : undefined }))
     res.json({ users })
   })
-  app.get('/api/admin/volunteer-applications', allowRoles('moderator', 'admin'), (req, res) => res.json({ applications: dataStore.data.volunteerApplications.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)) }))
+  app.get('/api/admin/volunteer-applications', allowRoles('moderator', 'admin'), (req, res) => {
+    const data = dataStore.snapshot()
+    const applications = data.volunteerApplications.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map((item) => {
+      const user = item.userId ? data.users.find((u) => u.id === item.userId) : data.users.find((u) => u.email?.toLowerCase() === item.email?.toLowerCase())
+      return {
+        ...item,
+        emailVerified: user ? Boolean(user.emailVerified) : false,
+      }
+    })
+    res.json({ applications })
+  })
   app.patch('/api/admin/volunteer-applications/:applicationId', allowRoles('moderator', 'admin'), asyncRoute(async (req, res) => {
     const body = parse(z.object({ status: z.enum(['approved', 'rejected']) }), req.body)
     const application = await dataStore.mutate((data) => {
       const item = data.volunteerApplications.find((candidate) => candidate.id === req.params.applicationId)
       if (!item) { const error = new Error('Volunteer application not found'); error.status = 404; throw error }
       item.status = body.status; item.reviewedAt = now(); item.reviewedBy = req.user.id
-      if (body.status === 'approved' && item.userId) {
-        const user = data.users.find((candidate) => candidate.id === item.userId)
-        if (user) { user.role = 'volunteer'; user.availability ||= 'unavailable'; user.expertise ||= ['Emotional support']; user.bio ||= 'Peer supporter assigned by the MentalBridge care team.' }
-        data.notifications.push({ id: id('notification'), userId: item.userId, type: 'account', title: 'Volunteer application approved', body: 'You can now support members as a peer volunteer.', read: false, createdAt: now() })
+      if (body.status === 'approved') {
+        const user = item.userId
+          ? data.users.find((candidate) => candidate.id === item.userId)
+          : data.users.find((candidate) => candidate.email?.toLowerCase() === item.email?.toLowerCase())
+        if (user) {
+          if (!item.userId) item.userId = user.id
+          user.role = 'volunteer'
+          user.availability ||= 'unavailable'
+          user.expertise ||= ['Emotional support']
+          user.bio ||= 'Peer supporter assigned by the MentalBridge care team.'
+          data.notifications.push({ id: id('notification'), userId: user.id, type: 'account', title: 'Volunteer application approved', body: 'You can now support members as a peer volunteer.', read: false, createdAt: now() })
+        }
       }
       return item
     })

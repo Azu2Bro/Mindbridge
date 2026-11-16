@@ -361,3 +361,74 @@ test('provisioned account activation and pending support without demo volunteers
   const library = await call(api.baseUrl, '/resources', { token })
   assert.equal(library.data.resources.filter((item) => item.url?.startsWith('https://')).length, 3)
 })
+
+test('volunteer application creates account with email verification and can be approved by moderator', async (context) => {
+  const api = await startTestApi()
+  context.after(async () => {
+    await new Promise((resolve) => api.server.close(resolve))
+    await new Promise((resolve) => api.staffServer.close(resolve))
+    await rm(api.directory, { recursive: true, force: true })
+  })
+
+  // 1. Volunteer applies with name, email, password, experience, motivation
+  const applyRes = await call(api.baseUrl, '/volunteer-applications', {
+    method: 'POST',
+    body: {
+      name: 'Samira Volunteer',
+      email: 'samira@example.com',
+      password: 'StrongPass123',
+      experience: 'Peer listener for over 3 years in community centers.',
+      motivation: 'Want to offer compassionate peer support to people who need it.',
+    },
+  })
+  assert.equal(applyRes.response.status, 201)
+  assert.equal(applyRes.data.verificationRequired, true)
+  assert.ok(applyRes.data.verificationToken)
+
+  // 2. Account cannot log in before verifying email
+  const unverifiedLogin = await call(api.baseUrl, '/auth/login', {
+    method: 'POST',
+    body: { email: 'samira@example.com', password: 'StrongPass123' },
+  })
+  assert.equal(unverifiedLogin.response.status, 403)
+  assert.equal(unverifiedLogin.data.verificationRequired, true)
+
+  // 3. Verify email with token
+  const verifyRes = await call(api.baseUrl, '/auth/verify-email', {
+    method: 'POST',
+    body: { token: applyRes.data.verificationToken },
+  })
+  assert.equal(verifyRes.response.status, 200)
+  assert.equal(verifyRes.data.success, true)
+
+  // 4. Admin logs in and checks volunteer applications
+  const adminLogin = await call(api.staffBaseUrl, '/auth/staff/login', {
+    method: 'POST',
+    body: { email: 'admin@mentalbridge.demo', password: 'Demo123!' },
+  })
+  assert.equal(adminLogin.response.status, 200)
+  const adminToken = adminLogin.data.token
+
+  const appsRes = await call(api.baseUrl, '/admin/volunteer-applications', { token: adminToken })
+  assert.equal(appsRes.response.status, 200)
+  const app = appsRes.data.applications.find((a) => a.email === 'samira@example.com')
+  assert.ok(app)
+  assert.equal(app.emailVerified, true)
+
+  // 5. Admin approves application
+  const approveRes = await call(api.baseUrl, `/admin/volunteer-applications/${app.id}`, {
+    token: adminToken,
+    method: 'PATCH',
+    body: { status: 'approved' },
+  })
+  assert.equal(approveRes.response.status, 200)
+  assert.equal(approveRes.data.application.status, 'approved')
+
+  // 6. User logs in - role is now volunteer!
+  const volunteerLogin = await call(api.baseUrl, '/auth/login', {
+    method: 'POST',
+    body: { email: 'samira@example.com', password: 'StrongPass123' },
+  })
+  assert.equal(volunteerLogin.response.status, 200)
+  assert.equal(volunteerLogin.data.user.role, 'volunteer')
+})

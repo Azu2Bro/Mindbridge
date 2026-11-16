@@ -48,9 +48,20 @@ export default function AuthScreen({ initialMode = 'login', onClose }) {
         setNotice(result.message)
         setMode('pending')
       } else if (mode === 'volunteerApply') {
-        const result = await api.applyVolunteer({ name: form.displayName, email: form.email, experience: form.experience, motivation: form.motivation })
+        const result = await api.applyVolunteer({
+          name: form.displayName,
+          email: form.email,
+          password: form.password,
+          experience: form.experience,
+          motivation: form.motivation,
+        })
         setNotice(result.message)
-        setMode('applicationSent')
+        if (result.verificationRequired) {
+          setVerificationToken(result.verificationToken || '')
+          setMode('pending')
+        } else {
+          setMode('applicationSent')
+        }
       } else if (mode === 'resend') {
         const result = await api.resendVerification(form.email)
         setVerificationToken(result.verificationToken || '')
@@ -118,8 +129,8 @@ export default function AuthScreen({ initialMode = 'login', onClose }) {
           {mode === 'volunteerApply' && <><div className="auth-field-row"><label><span>Your name</span><input required minLength={2} maxLength={70} value={form.displayName} onChange={update('displayName')} /></label><label><span>Email address</span><input type="email" required value={form.email} onChange={update('email')} /></label></div><label className="auth-field"><span>Relevant experience</span><textarea className="volunteer-application-textarea" required minLength={20} maxLength={1200} value={form.experience} onChange={update('experience')} placeholder="Tell moderators about your lived or peer-support experience." /></label><label className="auth-field"><span>Why would you like to volunteer?</span><textarea className="volunteer-application-textarea" required minLength={20} maxLength={1200} value={form.motivation} onChange={update('motivation')} placeholder="Share how you would support members safely." /></label></>}
           {mode === 'register' && <><div className="auth-field-row"><label><span>Your name</span><input required minLength={2} maxLength={70} value={form.displayName} onChange={update('displayName')} placeholder="Your private name" /></label><label><span>Anonymous name <em>(optional)</em></span><input minLength={3} maxLength={40} value={form.anonymousName} onChange={update('anonymousName')} placeholder="QuietRiver" /><small className="field-hint">Bengali and English names are supported. Leave blank for an automatic private name.</small></label></div><ProfilePicturePicker value={form.avatarUrl} onChange={(avatarUrl) => setForm({ ...form, avatarUrl })} /></>}
           {mode !== 'reset' && !['volunteerApply'].includes(mode) && <label className="auth-field"><span>Email address</span><input type="email" required value={form.email} onChange={update('email')} placeholder="you@example.com" autoComplete="email" /></label>}
-          {!['forgot', 'resend', 'volunteerApply'].includes(mode) && <label className="auth-field"><span>{mode === 'reset' ? 'New password' : 'Password'}</span><div><input type={showPassword ? 'text' : 'password'} required minLength={8} value={form.password} onChange={update('password')} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} /><button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div></label>}
-          {['register', 'reset'].includes(mode) && <div className="password-hint"><LockKeyhole size={14} /> Use 8+ characters with an uppercase letter and number.</div>}
+          {!['forgot', 'resend'].includes(mode) && <label className="auth-field"><span>{mode === 'reset' ? 'New password' : mode === 'volunteerApply' ? 'Create a password' : 'Password'}</span><div><input type={showPassword ? 'text' : 'password'} required minLength={8} value={form.password} onChange={update('password')} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} /><button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></div></label>}
+          {['register', 'reset', 'volunteerApply'].includes(mode) && <div className="password-hint"><LockKeyhole size={14} /> Use 8+ characters with an uppercase letter and number.</div>}
           {mode === 'login' && <button type="button" className="forgot-link" onClick={() => changeMode('forgot')}>Forgot your password?</button>}
           {error && <div className="auth-error" role="alert">{error}{staffHint && <a className="auth-error-link" href="/staff">Go to the staff portal <ArrowRight size={13} /></a>}</div>}
           {notice && <div className="auth-notice" role="status">{notice}</div>}
