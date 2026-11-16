@@ -74,10 +74,8 @@ services:
 
       - key: AI_PROVIDER
         value: groq
-      # This deployment is a prototype, so its varied sample peer profiles are
-      # returned by the real API and clearly labeled in the matching UI.
       - key: ALLOW_DEMO_MATCHES
-        value: "true"
+        value: "false"
       - key: INITIAL_ADMIN_EMAIL
         sync: false
       - key: INITIAL_VOLUNTEER_EMAILS

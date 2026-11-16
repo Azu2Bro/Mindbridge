@@ -115,6 +115,18 @@ async function normalizeDataStore(dataStore) {
       }
       data.meta.demoMatchingVersion = 3
     }
+    // Clean up mock demo accounts (@mentalbridge.demo) and their associated sample records
+    const demoUserIds = new Set(data.users.filter((user) => user.email?.toLowerCase().endsWith('@mentalbridge.demo') || user.isDemo).map((user) => user.id))
+    if (demoUserIds.size > 0) {
+      data.users = data.users.filter((user) => !demoUserIds.has(user.id))
+      data.supportRequests = (data.supportRequests || []).filter((r) => !demoUserIds.has(r.userId) && !demoUserIds.has(r.volunteerId))
+      data.conversations = (data.conversations || []).filter((c) => !c.participantIds?.some((pId) => demoUserIds.has(pId)))
+      data.moods = (data.moods || []).filter((m) => !demoUserIds.has(m.userId))
+      data.notifications = (data.notifications || []).filter((n) => !demoUserIds.has(n.userId))
+      data.volunteerApplications = (data.volunteerApplications || []).filter((a) => !demoUserIds.has(a.userId) && !a.email?.toLowerCase().endsWith('@mentalbridge.demo'))
+      data.auditLogs = (data.auditLogs || []).filter((l) => !demoUserIds.has(l.actorId) && !demoUserIds.has(l.targetId))
+    }
+
     const adminEmails = [
       ...String(process.env.INITIAL_ADMIN_EMAIL || 'tafhimul456@gmail.com').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
     ]
@@ -957,6 +969,40 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
       return item
     })
     res.json({ user: publicUser(user) })
+  }))
+
+  app.delete('/api/admin/users/:userId', allowRoles('admin'), asyncRoute(async (req, res) => {
+    if (req.params.userId === req.user.id) return res.status(409).json({ error: 'You cannot delete your own account' })
+    const user = await dataStore.mutate((data) => {
+      const index = data.users.findIndex((u) => u.id === req.params.userId)
+      if (index < 0) { const error = new Error('User not found'); error.status = 404; throw error }
+      const [removed] = data.users.splice(index, 1)
+      data.supportRequests = (data.supportRequests || []).filter((r) => r.userId !== removed.id && r.volunteerId !== removed.id)
+      data.conversations = (data.conversations || []).filter((c) => !c.participantIds?.includes(removed.id))
+      data.moods = (data.moods || []).filter((m) => m.userId !== removed.id)
+      data.notifications = (data.notifications || []).filter((n) => n.userId !== removed.id)
+      data.volunteerApplications = (data.volunteerApplications || []).filter((a) => a.userId !== removed.id && a.email?.toLowerCase() !== removed.email?.toLowerCase())
+      data.auditLogs.push({ id: id('audit'), actorId: req.user.id, action: 'user.deleted', targetId: removed.id, metadata: { email: removed.email }, createdAt: now() })
+      return removed
+    })
+    res.json({ success: true, user: publicUser(user) })
+  }))
+
+  app.post('/api/admin/purge-demo', allowRoles('admin'), asyncRoute(async (req, res) => {
+    const count = await dataStore.mutate((data) => {
+      const demoUserIds = new Set(data.users.filter((u) => u.email?.toLowerCase().endsWith('@mentalbridge.demo') || u.isDemo).map((u) => u.id))
+      if (!demoUserIds.size) return 0
+      data.users = data.users.filter((u) => !demoUserIds.has(u.id))
+      data.supportRequests = (data.supportRequests || []).filter((r) => !demoUserIds.has(r.userId) && !demoUserIds.has(r.volunteerId))
+      data.conversations = (data.conversations || []).filter((c) => !c.participantIds?.some((pId) => demoUserIds.has(pId)))
+      data.moods = (data.moods || []).filter((m) => !demoUserIds.has(m.userId))
+      data.notifications = (data.notifications || []).filter((n) => !demoUserIds.has(n.userId))
+      data.volunteerApplications = (data.volunteerApplications || []).filter((a) => !demoUserIds.has(a.userId) && !a.email?.toLowerCase().endsWith('@mentalbridge.demo'))
+      data.auditLogs = (data.auditLogs || []).filter((l) => !demoUserIds.has(l.actorId) && !demoUserIds.has(l.targetId))
+      data.auditLogs.push({ id: id('audit'), actorId: req.user.id, action: 'demo.data.purged', metadata: { count: demoUserIds.size }, createdAt: now() })
+      return demoUserIds.size
+    })
+    res.json({ success: true, count })
   }))
 
   // Serve the built single-page app from the API origin whenever a build exists. One URL then
