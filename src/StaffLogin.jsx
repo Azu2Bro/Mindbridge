@@ -65,7 +65,7 @@ export default function StaffLogin({ theme }) {
       await api.resetPassword(resetToken, form.password)
       clearResetUrl()
       setForm((current) => ({ ...current, password: '' }))
-      setNotice('Your staff password has been changed. Sign in below.')
+      setNotice('Your staff password has been changed. Login below.')
       setMode('login')
     } catch (submitError) {
       setError(submitError.message)
@@ -96,7 +96,7 @@ export default function StaffLogin({ theme }) {
 
       {mode === 'login' ? (
         <form className="staff-card" onSubmit={submit}>
-          <h2>Sign in as staff</h2>
+          <h2>Login as staff</h2>
           <p>Use the work email attached to your moderator or administrator role.</p>
 
           <label className="auth-field">
@@ -115,7 +115,7 @@ export default function StaffLogin({ theme }) {
           {error && <div className="auth-error" role="alert">{error}</div>}
 
           <button className="button button-dark auth-submit" disabled={loading}>
-            {loading ? <><LoaderCircle className="spin" size={17} /> Verifying…</> : <>Enter the console <ArrowRight size={17} /></>}
+            {loading ? <><LoaderCircle className="spin" size={17} /> Verifying…</> : <>Login as Staff <ArrowRight size={17} /></>}
           </button>
 
           <button type="button" className="forgot-link" onClick={() => { setMode('forgot'); setForgotSent(false); setForgotError(''); setForgotEmail(form.email) }}>Reset password</button>
@@ -141,7 +141,7 @@ export default function StaffLogin({ theme }) {
             {loading ? <><LoaderCircle className="spin" size={17} /> Saving…</> : <>Save new password <ArrowRight size={17} /></>}
           </button>
 
-          <button type="button" className="forgot-link" onClick={goToLogin}>Back to sign-in</button>
+          <button type="button" className="forgot-link" onClick={goToLogin}>Back to login</button>
           <div className="auth-security"><ShieldCheck size={16} /> Staff reset links are single-use and expire after 30 minutes.</div>
         </form>
       ) : (
@@ -153,7 +153,7 @@ export default function StaffLogin({ theme }) {
             <div className="staff-reset-sent">
               <CheckCircle2 size={28} />
               <p><b>Check your inbox.</b> If a staff account exists for that address, a reset link has been sent. It expires in 30 minutes.</p>
-              <button type="button" className="button button-dark auth-submit" onClick={goToLogin}>Back to sign-in</button>
+              <button type="button" className="button button-dark auth-submit" onClick={goToLogin}>Back to login</button>
             </div>
           ) : (
             <>
@@ -171,7 +171,7 @@ export default function StaffLogin({ theme }) {
                 {forgotLoading ? <><LoaderCircle className="spin" size={17} /> Sending…</> : <>Send reset link <ArrowRight size={17} /></>}
               </button>
 
-              <button type="button" className="forgot-link" onClick={goToLogin}>Back to sign-in</button>
+              <button type="button" className="forgot-link" onClick={goToLogin}>Back to login</button>
             </>
           )}
 
