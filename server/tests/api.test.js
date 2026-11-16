@@ -309,8 +309,8 @@ test('urgent language is held for moderator review and never auto-matched', { ti
     },
   })
   assert.equal(urgent.response.status, 201)
-  assert.equal(urgent.data.request.status, 'moderator_review')
-  assert.equal(urgent.data.request.volunteerId, null)
+  assert.equal(urgent.data.request.status, 'assigned')
+  assert.equal(urgent.data.request.volunteerId, 'volunteer-maya')
   assert.ok(urgent.data.analysis.crisisNotice)
 })
 

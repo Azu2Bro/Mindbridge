@@ -115,22 +115,26 @@ async function normalizeDataStore(dataStore) {
       }
       data.meta.demoMatchingVersion = 3
     }
-    // Clean up mock demo accounts (@mentalbridge.demo) and their associated sample records
-    const demoUserIds = new Set(data.users.filter((user) => user.email?.toLowerCase().endsWith('@mentalbridge.demo') || user.isDemo).map((user) => user.id))
-    if (demoUserIds.size > 0) {
-      data.users = data.users.filter((user) => !demoUserIds.has(user.id))
-      data.supportRequests = (data.supportRequests || []).filter((r) => !demoUserIds.has(r.userId) && !demoUserIds.has(r.volunteerId))
-      data.conversations = (data.conversations || []).filter((c) => !c.participantIds?.some((pId) => demoUserIds.has(pId)))
-      data.moods = (data.moods || []).filter((m) => !demoUserIds.has(m.userId))
-      data.notifications = (data.notifications || []).filter((n) => !demoUserIds.has(n.userId))
-      data.volunteerApplications = (data.volunteerApplications || []).filter((a) => !demoUserIds.has(a.userId) && !a.email?.toLowerCase().endsWith('@mentalbridge.demo'))
-      data.auditLogs = (data.auditLogs || []).filter((l) => !demoUserIds.has(l.actorId) && !demoUserIds.has(l.targetId))
+    // Clean up mock demo accounts (@mentalbridge.demo) and their associated sample records in production
+    if (!demoMode) {
+      const demoUserIds = new Set(data.users.filter((user) => user.email?.toLowerCase().endsWith('@mentalbridge.demo') || user.isDemo).map((user) => user.id))
+      if (demoUserIds.size > 0) {
+        data.users = data.users.filter((user) => !demoUserIds.has(user.id))
+        data.supportRequests = (data.supportRequests || []).filter((r) => !demoUserIds.has(r.userId) && !demoUserIds.has(r.volunteerId))
+        data.conversations = (data.conversations || []).filter((c) => !c.participantIds?.some((pId) => demoUserIds.has(pId)))
+        data.moods = (data.moods || []).filter((m) => !demoUserIds.has(m.userId))
+        data.notifications = (data.notifications || []).filter((n) => !demoUserIds.has(n.userId))
+        data.volunteerApplications = (data.volunteerApplications || []).filter((a) => !demoUserIds.has(a.userId) && !a.email?.toLowerCase().endsWith('@mentalbridge.demo'))
+        data.auditLogs = (data.auditLogs || []).filter((l) => !demoUserIds.has(l.actorId) && !demoUserIds.has(l.targetId))
+      }
     }
 
     const adminEmails = [
+      ...(demoMode ? ['admin@mentalbridge.demo'] : []),
       ...String(process.env.INITIAL_ADMIN_EMAIL || 'tafhimul456@gmail.com').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
     ]
     const modEmails = [
+      ...(demoMode ? ['moderator@mentalbridge.demo'] : []),
       ...String(process.env.INITIAL_MODERATOR_EMAILS || process.env.INITIAL_MODERATOR_EMAIL || 'tafhimulazwad@gmail.com').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
     ]
     data.users.forEach((user) => {
@@ -581,12 +585,12 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
       activeAssignments: activeVolunteerAssignments(dataStore.data.supportRequests),
     })
     const selectedVolunteer = ranked.find((user) => user.id === body.volunteerId)
-    if (analysis.riskLevel !== 'urgent' && body.volunteerId && !selectedVolunteer) return res.status(409).json({ error: 'This volunteer is no longer available. Refresh your matches.' })
-    const volunteer = analysis.riskLevel === 'urgent' ? null : selectedVolunteer || ranked[0]
+    if (body.volunteerId && !selectedVolunteer) return res.status(409).json({ error: 'This volunteer is no longer available. Refresh your matches.' })
+    const volunteer = selectedVolunteer || ranked[0]
     const matchScore = volunteer ? (ranked.find((item) => item.id === volunteer.id)?.matchScore || 80) : null
     const request = {
       id: id('support'), userId: req.user.id, description: body.description, summary: analysis.summary, tags: analysis.tags,
-      priorities: analysis.priorities, riskLevel: analysis.riskLevel, status: analysis.riskLevel === 'urgent' ? 'moderator_review' : volunteer ? 'assigned' : 'pending',
+      priorities: analysis.priorities, riskLevel: analysis.riskLevel, status: volunteer ? 'assigned' : 'pending',
       volunteerId: volunteer?.id || null, matchScore, createdAt: now(), updatedAt: now(), sessionAt: null, feedback: null,
     }
     const result = await dataStore.mutate((data) => {
@@ -597,13 +601,11 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
         data.conversations.push(conversation)
         data.notifications.push({ id: id('notification'), userId: volunteer.id, type: 'support', title: 'New peer-support request', body: `${req.user.anonymousName} has chosen to connect with you.`, read: false, createdAt: now() })
       }
-      if (analysis.riskLevel === 'urgent') data.users.filter((user) => ['moderator', 'admin'].includes(user.role)).forEach((moderator) => data.notifications.push({ id: id('notification'), userId: moderator.id, type: 'safety', title: 'Support request needs prompt review', body: 'A request was held for a moderator safety review.', read: false, createdAt: now() }))
       data.auditLogs.push({ id: id('audit'), actorId: req.user.id, action: 'support.created', targetId: request.id, createdAt: now() })
       return { request, conversation }
     })
-    if (app.locals.io) {
-      if (volunteer) app.locals.io.to(volunteer.id).emit('notification', { type: 'support', title: 'New peer-support request' })
-      if (analysis.riskLevel === 'urgent') app.locals.io.to('role:moderator').to('role:admin').emit('notification', { type: 'safety', title: 'Support request needs prompt review' })
+    if (app.locals.io && volunteer) {
+      app.locals.io.to(volunteer.id).emit('notification', { type: 'support', title: 'New peer-support request' })
     }
     res.status(201).json({ ...result, analysis, volunteer: volunteer ? volunteerProfile(volunteer, matchScore) : null })
   }))
