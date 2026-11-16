@@ -118,7 +118,7 @@ export default function StaffLogin({ theme }) {
             {loading ? <><LoaderCircle className="spin" size={17} /> Verifying…</> : <>Enter the console <ArrowRight size={17} /></>}
           </button>
 
-          <button type="button" className="forgot-link" onClick={() => { setMode('forgot'); setForgotSent(false); setForgotError(''); setForgotEmail(form.email) }}>Set up account or reset password</button>
+          <button type="button" className="forgot-link" onClick={() => { setMode('forgot'); setForgotSent(false); setForgotError(''); setForgotEmail(form.email) }}>Reset password</button>
           <div className="auth-security"><ShieldCheck size={16} /> Staff sessions carry elevated permissions. Never share these credentials.</div>
         </form>
       ) : mode === 'reset' ? (
