@@ -1261,7 +1261,7 @@ function AdminView({ showToast, user }) {
       return <article key={report.id}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
           <b>{targetPost?.title || `${report.targetType} report`}</b>
-          <span className="status-badge" style={isPostRemoved ? { background: 'var(--coral-light)', color: 'var(--coral)' } : isKept ? { background: 'var(--sage-light)', color: 'var(--sage-dark)' } : undefined}>
+          <span className={`status-badge ${isPostRemoved ? 'danger' : isKept ? 'success' : ''}`}>
             {isPostRemoved ? 'Post removed' : isKept ? 'Kept (No violation)' : 'Needs review'}
           </span>
         </div>

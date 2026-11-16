@@ -1045,25 +1045,28 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     const result = await dataStore.mutate((data) => {
       const conversation = data.conversations.find((item) => item.id === req.params.conversationId && item.participantIds.includes(req.user.id))
       if (!conversation) { const error = new Error('Conversation not found'); error.status = 404; throw error }
-      if (req.user.role === 'volunteer' && conversation.supportRequestId) {
-        const supportRequest = data.supportRequests.find((r) => r.id === conversation.supportRequestId)
-        if (supportRequest && !['in_progress', 'completed'].includes(supportRequest.status)) {
-          const error = new Error('Please accept the peer support request before sending messages'); error.status = 403; throw error
-        }
+      const supportRequest = conversation.supportRequestId ? data.supportRequests.find((r) => r.id === conversation.supportRequestId) : null
+      const isPendingSupport = Boolean(supportRequest && !['in_progress', 'completed'].includes(supportRequest.status))
+      if (req.user.role === 'volunteer' && isPendingSupport) {
+        const error = new Error('Please accept the peer support request before sending messages'); error.status = 403; throw error
       }
       const message = { id: id('message'), senderId: req.user.id, text, createdAt: now(), readBy: [req.user.id] }
       conversation.messages.push(message)
       const recipientId = conversation.participantIds.find((participantId) => participantId !== req.user.id)
       const senderName = req.user.role === 'user' ? req.user.anonymousName : req.user.displayName
-      data.notifications.push({ id: id('notification'), userId: recipientId, type: 'message', title: `${senderName} sent you a message`, body: text.slice(0, 100), read: false, createdAt: now() })
-      return { message, recipientId }
+      if (!isPendingSupport) {
+        data.notifications.push({ id: id('notification'), userId: recipientId, type: 'message', title: `${senderName} sent you a message`, body: text.slice(0, 100), read: false, createdAt: now() })
+      }
+      return { message, recipientId, isPendingSupport }
     })
     const senderName = req.user.role === 'user' ? req.user.anonymousName : req.user.displayName
-    app.locals.io?.to(result.recipientId).emit('message', { conversationId: req.params.conversationId, message: result.message })
-    app.locals.io?.to(result.recipientId).emit('notification', { type: 'message', title: `${senderName} sent you a message` })
+    if (!result.isPendingSupport) {
+      app.locals.io?.to(result.recipientId).emit('message', { conversationId: req.params.conversationId, message: result.message })
+      app.locals.io?.to(result.recipientId).emit('notification', { type: 'message', title: `${senderName} sent you a message` })
+    }
     res.status(201).json({ message: result.message })
 
-    if (req.user.role === 'user') {
+    if (req.user.role === 'user' && !result.isPendingSupport) {
       const recipient = dataStore.snapshot().users.find((u) => u.id === result.recipientId)
       if (recipient && recipient.role === 'volunteer' && (recipient.isDemo || recipient.email?.toLowerCase().endsWith('@mentalbridge.demo'))) {
         setTimeout(async () => {
