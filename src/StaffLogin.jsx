@@ -5,17 +5,29 @@ import { api } from './api'
 
 export default function StaffLogin({ theme }) {
   const { staffLogin } = useAuth()
+  const initialResetToken = new URLSearchParams(window.location.search).get('reset') || ''
   const [form, setForm] = useState({ email: '', password: '' })
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [mode, setMode] = useState('login') // 'login' | 'forgot'
+  const [notice, setNotice] = useState('')
+  const [resetToken] = useState(initialResetToken)
+  const [mode, setMode] = useState(initialResetToken ? 'reset' : 'login')
   const [forgotEmail, setForgotEmail] = useState('')
   const [forgotLoading, setForgotLoading] = useState(false)
   const [forgotError, setForgotError] = useState('')
   const [forgotSent, setForgotSent] = useState(false)
 
   const update = (key) => (event) => setForm({ ...form, [key]: event.target.value })
+
+  const clearResetUrl = () => window.history.replaceState({}, '', '/staff')
+  const goToLogin = () => {
+    clearResetUrl()
+    setMode('login')
+    setForgotSent(false)
+    setForgotError('')
+    setError('')
+  }
 
   const submit = async (event) => {
     event.preventDefault()
@@ -36,7 +48,7 @@ export default function StaffLogin({ theme }) {
     setForgotLoading(true)
     setForgotError('')
     try {
-      await api.forgotPassword(forgotEmail.trim())
+      await api.forgotPassword(forgotEmail.trim(), 'staff')
       setForgotSent(true)
     } catch (err) {
       setForgotError(err.message)
@@ -45,11 +57,28 @@ export default function StaffLogin({ theme }) {
     }
   }
 
+  const submitReset = async (event) => {
+    event.preventDefault()
+    setLoading(true)
+    setError('')
+    try {
+      await api.resetPassword(resetToken, form.password)
+      clearResetUrl()
+      setForm((current) => ({ ...current, password: '' }))
+      setNotice('Your staff password has been changed. Sign in below.')
+      setMode('login')
+    } catch (submitError) {
+      setError(submitError.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return <div className="staff-page" data-theme={theme === 'dark' ? 'dark' : undefined}>
     <div className="staff-backdrop" aria-hidden="true"><i /><i /><i /></div>
 
     <header className="staff-topbar">
-      <button className="staff-brand" onClick={() => { setMode('login'); setForgotSent(false); setForgotError('') }} type="button"><span className="brand-mark"><HeartHandshake size={22} /></span><span>Mental<span>Bridge</span></span></button>
+      <button className="staff-brand" onClick={goToLogin} type="button"><span className="brand-mark"><HeartHandshake size={22} /></span><span>Mental<span>Bridge</span></span></button>
       <span className="staff-badge"><LockKeyhole size={14} /> Staff portal</span>
     </header>
 
@@ -82,6 +111,7 @@ export default function StaffLogin({ theme }) {
             </div>
           </label>
 
+          {notice && <div className="auth-notice" role="status">{notice}</div>}
           {error && <div className="auth-error" role="alert">{error}</div>}
 
           <button className="button button-dark auth-submit" disabled={loading}>
@@ -90,6 +120,29 @@ export default function StaffLogin({ theme }) {
 
           <button type="button" className="forgot-link" onClick={() => { setMode('forgot'); setForgotSent(false); setForgotError(''); setForgotEmail(form.email) }}>Set up account or reset password</button>
           <div className="auth-security"><ShieldCheck size={16} /> Staff sessions carry elevated permissions. Never share these credentials.</div>
+        </form>
+      ) : mode === 'reset' ? (
+        <form className="staff-card" onSubmit={submitReset}>
+          <h2>Choose a new staff password</h2>
+          <p>Use at least eight characters. This link can only be used once.</p>
+
+          <label className="auth-field">
+            <span>New password</span>
+            <div>
+              <input type={showPassword ? 'text' : 'password'} required minLength={8} value={form.password} onChange={update('password')} autoComplete="new-password" />
+              <button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button>
+            </div>
+          </label>
+          <span className="password-hint">Use 8 or more characters.</span>
+
+          {error && <div className="auth-error" role="alert">{error}</div>}
+
+          <button className="button button-dark auth-submit" disabled={loading}>
+            {loading ? <><LoaderCircle className="spin" size={17} /> Saving…</> : <>Save new password <ArrowRight size={17} /></>}
+          </button>
+
+          <button type="button" className="forgot-link" onClick={goToLogin}>Back to sign-in</button>
+          <div className="auth-security"><ShieldCheck size={16} /> Staff reset links are single-use and expire after 30 minutes.</div>
         </form>
       ) : (
         <form className="staff-card" onSubmit={submitForgot}>
@@ -100,7 +153,7 @@ export default function StaffLogin({ theme }) {
             <div className="staff-reset-sent">
               <CheckCircle2 size={28} />
               <p><b>Check your inbox.</b> If a staff account exists for that address, a reset link has been sent. It expires in 30 minutes.</p>
-              <button type="button" className="button button-dark auth-submit" onClick={() => { setMode('login'); setForgotSent(false) }}>Back to sign-in</button>
+              <button type="button" className="button button-dark auth-submit" onClick={goToLogin}>Back to sign-in</button>
             </div>
           ) : (
             <>
@@ -118,7 +171,7 @@ export default function StaffLogin({ theme }) {
                 {forgotLoading ? <><LoaderCircle className="spin" size={17} /> Sending…</> : <>Send reset link <ArrowRight size={17} /></>}
               </button>
 
-              <button type="button" className="forgot-link" onClick={() => setMode('login')}>Back to sign-in</button>
+              <button type="button" className="forgot-link" onClick={goToLogin}>Back to sign-in</button>
             </>
           )}
 

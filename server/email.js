@@ -30,10 +30,15 @@ export function appBaseUrl(requestOrigin) {
 
 const escapeHtml = (value) => value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character])
 
-export async function sendPasswordResetEmail({ to, displayName, token, requestOrigin }) {
+export function passwordResetUrl(token, portal = 'member', requestOrigin) {
+  const path = portal === 'staff' ? '/staff' : '/'
+  return `${appBaseUrl(requestOrigin)}${path}?reset=${encodeURIComponent(token)}`
+}
+
+export async function sendPasswordResetEmail({ to, displayName, token, portal = 'member', requestOrigin }) {
   const transporter = createTransporter()
   if (!transporter) return false
-  const resetUrl = `${appBaseUrl(requestOrigin)}/?reset=${encodeURIComponent(token)}`
+  const resetUrl = passwordResetUrl(token, portal, requestOrigin)
   const safeName = escapeHtml(displayName)
   await transporter.sendMail({
     from: process.env.SMTP_FROM || 'MentalBridge <no-reply@mentalbridge.local>',

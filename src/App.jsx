@@ -213,7 +213,8 @@ function App() {
 
   // Once a staff member is signed in the portal URL has served its purpose.
   useEffect(() => {
-    if (user && /^\/(staff|admin|moderator)\/?$/i.test(window.location.pathname)) window.history.replaceState({}, '', '/')
+    const hasRecoveryToken = new URLSearchParams(window.location.search).has('reset')
+    if (user && !hasRecoveryToken && /^\/(staff|admin|moderator)\/?$/i.test(window.location.pathname)) window.history.replaceState({}, '', '/')
   }, [user])
 
   useEffect(() => {

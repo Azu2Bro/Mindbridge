@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { appBaseUrl } from '../email.js'
+import { appBaseUrl, passwordResetUrl } from '../email.js'
 import { analyzeSupportText, rankVolunteers } from '../ai.js'
 import { provisionAccounts } from '../provision-accounts.js'
 import { verifyGoogleCredential } from '../google-auth.js'
@@ -17,6 +17,8 @@ test('email URLs use trusted development origins and reject production localhost
   setEnv(t, 'CLIENT_ORIGIN', 'http://localhost:5173')
   assert.equal(appBaseUrl('http://localhost:5173'), 'http://localhost:5173')
   assert.equal(appBaseUrl('https://attacker.example'), 'http://localhost:3001')
+  assert.equal(passwordResetUrl('member-token', 'member', 'http://localhost:5173'), 'http://localhost:5173/?reset=member-token')
+  assert.equal(passwordResetUrl('staff-token', 'staff', 'http://localhost:5173'), 'http://localhost:5173/staff?reset=staff-token')
   process.env.NODE_ENV = 'production'
   assert.throws(() => appBaseUrl(), /public HTTPS/)
   process.env.APP_URL = 'mentalbridge.example/'
@@ -142,18 +144,22 @@ test('matching varies by support themes, priorities, availability, and capacity'
 
 test('provisioning preserves existing passwords and leaves new volunteers unverified and unavailable', async (t) => {
   setEnv(t, 'INITIAL_ADMIN_EMAIL', 'owner@example.com')
+  setEnv(t, 'INITIAL_MODERATOR_EMAILS', '')
+  setEnv(t, 'INITIAL_MODERATOR_EMAIL', 'moderator@example.com')
   setEnv(t, 'INITIAL_VOLUNTEER_EMAILS', 'peer@example.com')
   const data = { users: [{ id: 'owner', email: 'owner@example.com', passwordHash: 'existing', emailVerified: true }], auditLogs: [] }
   const store = { mutate: async (fn) => fn(data) }
   await provisionAccounts(store)
   await provisionAccounts(store)
-  assert.equal(data.users.length, 2)
+  assert.equal(data.users.length, 3)
   assert.equal(data.users[0].role, 'admin')
   assert.equal(data.users[0].passwordHash, 'existing')
-  const peer = data.users[1]
+  const moderator = data.users.find((item) => item.email === 'moderator@example.com')
+  assert.equal(moderator.role, 'moderator')
+  const peer = data.users.find((item) => item.email === 'peer@example.com')
   assert.equal(peer.role, 'volunteer')
   assert.equal(peer.emailVerified, false)
   assert.equal(peer.accountSetupRequired, true)
   assert.equal(peer.availability, 'unavailable')
-  assert.equal(data.auditLogs.length, 2)
+  assert.equal(data.auditLogs.length, 3)
 })

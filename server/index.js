@@ -242,7 +242,7 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     // Also block provisioned staff emails that haven't been set up yet
     const staffEmails = [
       ...String(process.env.INITIAL_ADMIN_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
-      ...String(process.env.INITIAL_MODERATOR_EMAILS || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
+      ...String(process.env.INITIAL_MODERATOR_EMAILS || process.env.INITIAL_MODERATOR_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
     ]
     if (staffEmails.includes(body.email)) return res.status(403).json({ error: 'This email is reserved for a staff account. Staff members cannot create user accounts. Sign in from the staff portal at /staff.' })
     const user = {
@@ -333,7 +333,7 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
         // Block staff emails from creating user accounts via Google sign-in
         const staffEmails = [
           ...String(process.env.INITIAL_ADMIN_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
-          ...String(process.env.INITIAL_MODERATOR_EMAILS || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
+          ...String(process.env.INITIAL_MODERATOR_EMAILS || process.env.INITIAL_MODERATOR_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
         ]
         if (staffEmails.includes(identity.email)) {
           const error = new Error('This email is reserved for a staff account. Staff members cannot create user accounts. Sign in from the staff portal at /staff.')
@@ -399,8 +399,8 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
   }))
 
   app.post('/api/auth/forgot-password', asyncRoute(async (req, res) => {
-    const email = parse(emailSchema, req.body?.email)
-    const user = dataStore.data.users.find((item) => item.email === email && item.status === 'active')
+    const body = parse(z.object({ email: emailSchema, portal: z.enum(['member', 'staff']).default('member') }), req.body)
+    const user = dataStore.data.users.find((item) => item.email === body.email && item.status === 'active')
     let resetToken = null
     let emailSent = false
     if (user) {
@@ -412,7 +412,8 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
         data.passwordResets.push({ id: id('reset'), userId: user.id, tokenHash, expiresAt: new Date(Date.now() + 30 * 60000).toISOString(), createdAt: now() })
         return true
       })
-      emailSent = await sendPasswordResetEmail({ to: user.email, displayName: user.displayName, token: resetToken, requestOrigin: req.get('origin') }).catch((error) => { console.error('Password reset email failed:', error.message); return false })
+      const portal = body.portal === 'staff' && staffRoles.includes(user.role) ? 'staff' : 'member'
+      emailSent = await sendPasswordResetEmail({ to: user.email, displayName: user.displayName, token: resetToken, portal, requestOrigin: req.get('origin') }).catch((error) => { console.error('Password reset email failed:', error.message); return false })
     }
     res.json({ message: 'If that account exists, a reset email has been requested. Check your inbox and spam folder. If it does not arrive, try again or contact support.', ...(process.env.NODE_ENV !== 'production' && !process.env.SMTP_HOST && !emailSent && resetToken ? { resetToken } : {}) })
   }))
@@ -428,7 +429,8 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
       if (!user || user.status !== 'active') { const error = new Error('Account is unavailable'); error.status = 400; throw error }
       user.passwordHash = await bcrypt.hash(body.password, 12)
       user.tokenVersion = (user.tokenVersion || 0) + 1
-      if (user.accountSetupRequired) { user.emailVerified = true; delete user.accountSetupRequired }
+      user.emailVerified = true
+      delete user.accountSetupRequired
       data.emailVerifications = data.emailVerifications.filter((item) => item.userId !== user.id)
       data.passwordResets = data.passwordResets.filter((item) => item.id !== reset.id)
       data.auditLogs.push({ id: id('audit'), actorId: user.id, action: 'password.reset', createdAt: now() })

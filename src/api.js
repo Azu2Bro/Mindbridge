@@ -63,7 +63,7 @@ export const api = {
   updateVolunteerApplication: (id, status) => request(`/admin/volunteer-applications/${id}`, json('PATCH', { status })),
   verifyEmail: (token) => request('/auth/verify-email', json('POST', { token })),
   resendVerification: (email) => request('/auth/resend-verification', json('POST', { email })),
-  forgotPassword: (email) => request('/auth/forgot-password', json('POST', { email })),
+  forgotPassword: (email, portal = 'member') => request('/auth/forgot-password', json('POST', { email, portal })),
   resetPassword: (token, password) => request('/auth/reset-password', json('POST', { token, password })),
   me: () => request('/auth/me'),
   updateProfile: (updates) => request('/users/me', json('PUT', updates)),

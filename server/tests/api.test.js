@@ -329,19 +329,26 @@ test('provisioned account activation and pending support without demo volunteers
   process.env.INITIAL_VOLUNTEER_EMAILS = 'setup-peer@example.com'
   process.env.ALLOW_DEMO_MATCHES = 'false'
   await provisionAccounts(api.store)
-  const forgot = await call(api.baseUrl, '/auth/forgot-password', { method: 'POST', body: { email: 'setup-owner@example.com' } })
+  const forgot = await call(api.baseUrl, '/auth/forgot-password', { method: 'POST', body: { email: 'setup-owner@example.com', portal: 'staff' } })
   const reset = await call(api.baseUrl, '/auth/reset-password', { method: 'POST', body: { token: forgot.data.resetToken, password: 'SetupOwner123' } })
   assert.equal(reset.response.status, 200)
   const staff = await call(api.staffBaseUrl, '/auth/staff/login', { method: 'POST', body: { email: 'setup-owner@example.com', password: 'SetupOwner123' } })
   assert.equal(staff.response.status, 200)
   assert.equal(staff.data.user.role, 'admin')
   assert.equal(staff.data.user.emailVerified, true)
-  const moderatorForgot = await call(api.baseUrl, '/auth/forgot-password', { method: 'POST', body: { email: 'setup-moderator@example.com' } })
+  await api.store.mutate((data) => {
+    const moderatorAccount = data.users.find((item) => item.email === 'setup-moderator@example.com')
+    moderatorAccount.emailVerified = false
+    delete moderatorAccount.accountSetupRequired
+    return true
+  })
+  const moderatorForgot = await call(api.baseUrl, '/auth/forgot-password', { method: 'POST', body: { email: 'setup-moderator@example.com', portal: 'staff' } })
   const moderatorReset = await call(api.baseUrl, '/auth/reset-password', { method: 'POST', body: { token: moderatorForgot.data.resetToken, password: 'SetupModerator123' } })
   assert.equal(moderatorReset.response.status, 200)
   const moderator = await call(api.staffBaseUrl, '/auth/staff/login', { method: 'POST', body: { email: 'setup-moderator@example.com', password: 'SetupModerator123' } })
   assert.equal(moderator.response.status, 200)
   assert.equal(moderator.data.user.role, 'moderator')
+  assert.equal(moderator.data.user.emailVerified, true)
   const login = await call(api.baseUrl, '/auth/login', { method: 'POST', body: { email: 'alex@mentalbridge.demo', password: 'Demo123!' } })
   const token = login.data.token
   assert.deepEqual((await call(api.baseUrl, '/volunteers', { token })).data.volunteers, [])
