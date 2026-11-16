@@ -1299,7 +1299,7 @@ function AdminView({ showToast, user }) {
         <p><b>Report reason:</b> {report.reason}</p>
         <small>{new Date(report.createdAt).toLocaleString()}</small>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginTop: 12 }}>
-          {isPending && (
+          {isPending ? (
             <>
               {targetPost && !targetPost.removed && (
                 <button className="button button-danger" disabled={busy === report.id || busy === targetPost.id} onClick={() => removeReportedPost(report.id, targetPost.id)}>
@@ -1309,11 +1309,13 @@ function AdminView({ showToast, user }) {
               <button className="button button-secondary" disabled={busy === report.id} onClick={() => keepReportedPost(report.id)}>
                 <Check size={14} /> Keep post
               </button>
+              <button className="button button-secondary" disabled={busy === report.id} onClick={() => deleteReport(report.id)} title="Delete report">
+                <Trash2 size={14} /> Delete report
+              </button>
             </>
-          )}
-          {!isPending && (
-            <button className="text-button danger" disabled={busy === report.id} onClick={() => deleteReport(report.id)} title="Clear report record">
-              <Trash2 size={13} /> Clear report
+          ) : (
+            <button className="button button-danger" disabled={busy === report.id} onClick={() => deleteReport(report.id)} title="Delete report">
+              <Trash2 size={14} /> Delete report
             </button>
           )}
         </div>
