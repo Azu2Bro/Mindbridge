@@ -250,6 +250,7 @@ try {
 
   assert.equal(await evaluate(`(() => { const button = document.querySelector('.hero-actions .button-coral'); if (!button) return false; button.click(); return true })()`), true)
   await waitForText('START WHERE YOU ARE')
+  assert.equal(await evaluate(`getComputedStyle(document.body).overflow`), 'hidden', 'Opening a dialog should lock background window scrolling')
   assert.equal(await evaluate(`(() => {
     const textarea = document.querySelector('.concern-field textarea')
     if (!textarea) return false
@@ -292,11 +293,18 @@ try {
   })()`)
   assert.ok(darkContrast >= 4.5, `Dark-mode summary contrast should meet WCAG AA; received ${darkContrast}`)
   await clickAriaLabel('Close')
+  assert.notEqual(await evaluate(`getComputedStyle(document.body).overflow`), 'hidden', 'Closing a dialog should restore window scrolling')
 
   await clickButton('Community')
   await waitForText('Real people, honest moments')
+  await send('Emulation.setDeviceMetricsOverride', { width: 1024, height: 500, deviceScaleFactor: 1, mobile: false })
+  await delay(250)
+  const previousPageScroll = await evaluate(`(() => { window.scrollTo(0, document.documentElement.scrollHeight); return { y: window.scrollY, height: document.documentElement.scrollHeight, viewport: innerHeight } })()`)
+  assert.ok(previousPageScroll.y > 0, `The community page should be tall enough to exercise page scroll restoration (${JSON.stringify(previousPageScroll)})`)
   await clickButton('Resources')
   await waitForText('Something helpful for this moment')
+  await retry(async () => assert.ok(await evaluate(`window.scrollY`) <= 1, 'A newly selected page should start at the top'))
+  await send('Emulation.clearDeviceMetricsOverride')
   await waitForText('A gentle guide to grounding yourself')
   await clickButton('Open resource')
   await waitForText('Educational information only')

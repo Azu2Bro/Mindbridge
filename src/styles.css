@@ -25,9 +25,12 @@
 }
 
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+html { scroll-behavior: auto; overflow-x: clip; }
 html, body, #root { width: 100%; min-width: 0; }
-body { margin: 0; min-width: 320px; min-height: 100vh; overflow-x: hidden; background: var(--canvas); }
+body { margin: 0; min-width: 320px; min-height: 100vh; overflow-x: clip; background: var(--canvas); }
+html:has(.landing-page) { scroll-behavior: smooth; }
+body:has(.modal-backdrop), body:has(.auth-overlay) { overflow: hidden; }
+.modal-backdrop, .auth-overlay { overscroll-behavior: contain; }
 button, input, textarea { font: inherit; }
 button { color: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
@@ -525,7 +528,7 @@ body { font-size: 16px; line-height: 1.55; }
    moderators and administrators, visually distinct from the
    member experience so the two are never confused.
    ============================================================ */
-.staff-page { min-height: 100vh; min-height: 100dvh; position: relative; overflow-x: hidden; overflow-y: auto; display: flex; flex-direction: column; color: #e7f2ec; background: #0c211a; background-image: radial-gradient(circle at 12% 8%, rgba(60,124,96,.30), transparent 42%), radial-gradient(circle at 88% 90%, rgba(236,129,95,.16), transparent 45%), linear-gradient(155deg, #0b201a, #081814 70%); }
+.staff-page { min-height: 100vh; min-height: 100dvh; position: relative; overflow-x: clip; display: flex; flex-direction: column; color: #e7f2ec; background: #0c211a; background-image: radial-gradient(circle at 12% 8%, rgba(60,124,96,.30), transparent 42%), radial-gradient(circle at 88% 90%, rgba(236,129,95,.16), transparent 45%), linear-gradient(155deg, #0b201a, #081814 70%); }
 .staff-backdrop { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .staff-backdrop i { position: absolute; border: 1px solid rgba(255,255,255,.055); border-radius: 50%; animation: staff-drift 26s ease-in-out infinite; }
 .staff-backdrop i:nth-child(1) { width: 560px; height: 560px; top: -210px; left: -160px; }

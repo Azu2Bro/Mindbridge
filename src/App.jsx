@@ -211,6 +211,18 @@ function App() {
     document.documentElement.dataset.theme = theme
   }, [theme])
 
+  useEffect(() => {
+    const previousScrollRestoration = window.history.scrollRestoration
+    window.history.scrollRestoration = 'manual'
+    return () => { window.history.scrollRestoration = previousScrollRestoration }
+  }, [])
+
+  // State-based navigation does not trigger the browser's normal page scroll reset.
+  // Run this after the new view renders so every destination starts at its heading.
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }, [active, user?.id])
+
   // Once a staff member is signed in the portal URL has served its purpose.
   useEffect(() => {
     const hasRecoveryToken = new URLSearchParams(window.location.search).has('reset')
@@ -248,10 +260,9 @@ function App() {
   }, [user?.id, user?.role])
 
   const navigate = (id, options = {}) => {
-    setActive(id)
     if (options.volunteer) id = 'volunteer-apply'
+    setActive(id)
     setSidebarOpen(false)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const titles = {
