@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowRight, CheckCircle2, Eye, EyeOff, HeartHandshake, LoaderCircle, LockKeyhole, Mail, ScrollText, ShieldAlert, ShieldCheck } from 'lucide-react'
+import { ArrowRight, CheckCircle2, Eye, EyeOff, HeartHandshake, LoaderCircle, LockKeyhole, Mail, ScrollText, ShieldCheck } from 'lucide-react'
 import { useAuth } from './AuthContext'
 import { api } from './api'
 
@@ -88,7 +88,6 @@ export default function StaffLogin({ theme }) {
         <h1>Care operations console.</h1>
         <p>This entrance is reserved for moderators and administrators. Member and volunteer accounts sign in from the main site.</p>
         <ul className="staff-facts">
-          <li><ShieldAlert size={18} /><div><b>Separate from member sign-in</b><span>Staff credentials are checked by their own endpoint, so a member account can never authenticate here.</span></div></li>
           <li><LockKeyhole size={18} /><div><b>Stricter attempt limit</b><span>Repeated failures on this portal are throttled well before the member portal would be.</span></div></li>
           <li><ScrollText size={18} /><div><b>Every attempt is recorded</b><span>Successful and refused staff sign-ins are written to the audit log with the role and timestamp.</span></div></li>
         </ul>
