@@ -72,6 +72,38 @@ function peerVisibleProfile(user, viewerId) {
   return volunteerProfile(user)
 }
 
+function generateDemoVolunteerReply(volunteer, userText, replyIndex) {
+  const lower = userText.toLowerCase()
+  if (/\b(thank|thanks|appreciate|helpful)\b/.test(lower)) {
+    return 'You’re very welcome. I’m really glad we can talk this through together. Remember to be gentle with yourself today—you’re doing the best you can.'
+  }
+  if (/\b(sleep|tired|exhausted|insomnia|rest)\b/.test(lower)) {
+    return 'Exhaustion makes everything feel twice as heavy. Have you had a chance to pause, drink some water, or step away from screens for a little while today?'
+  }
+  if (/\b(work|deadline|boss|job|school|exam|study)\b/.test(lower)) {
+    return 'Work and responsibility pressures can build up so fast. When everything feels urgent, it helps to ask: what is the single small thing that actually needs attention first, and what can wait?'
+  }
+  if (/\b(alone|lonely|isolated|nobody|no one)\b/.test(lower)) {
+    return 'Feeling alone with heavy thoughts is really painful. I want you to know that I’m right here listening, and your feelings are completely valid. You don’t have to carry this in silence.'
+  }
+  if (/\b(anxious|anxiety|panic|scared|worry|racing)\b/.test(lower)) {
+    return 'When thoughts start racing, our bodies often tense up without us noticing. Can you try unclenching your jaw, dropping your shoulders, and taking one slow, deep breath with me right now?'
+  }
+  if (/\b(sad|depressed|hopeless|down|cry|crying)\b/.test(lower)) {
+    return 'It is completely okay not to feel okay today. You don’t have to put on a brave face here. What is something small that brings even a tiny bit of comfort when you feel this way?'
+  }
+
+  const stageResponses = [
+    'Thank you for sharing that with me. It takes real courage to put those feelings into words. What part of that has been feeling the heaviest for you today?',
+    'I hear how much weight that has been putting on your mind. You’ve been holding a lot together. How long have you felt like you had to carry this alone?',
+    'That completely makes sense given everything you are dealing with. When you feel this way, what usually helps you feel just a little bit more grounded or safe?',
+    'I really appreciate you trusting me with this. You are doing important work just by noticing these patterns and talking through them. We can take this at whatever pace feels comfortable for you.',
+    'You are showing a lot of resilience by speaking up and looking after yourself. What is one kind thing you could do for yourself before the day ends?',
+    'I’m still right here with you. Take all the time you need. How is your body feeling right now compared to when we first started talking?',
+  ]
+  return stageResponses[replyIndex % stageResponses.length]
+}
+
 function formatPost(post, userId, postBookmarks = []) {
   return {
     ...post,
@@ -788,6 +820,22 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
       }
       const previousVolunteerId = item.volunteerId
       Object.assign(item, body, { updatedAt: now() })
+      if (body.status === 'in_progress') {
+        let conversation = data.conversations.find((c) => c.supportRequestId === item.id)
+        if (!conversation && item.volunteerId) {
+          conversation = { id: id('conversation'), supportRequestId: item.id, participantIds: [item.userId, item.volunteerId], createdAt: now(), messages: [] }
+          data.conversations.push(conversation)
+        }
+        data.notifications.push({
+          id: id('notification'),
+          userId: item.userId,
+          type: 'support',
+          title: 'Peer support request accepted',
+          body: `${req.user.displayName} accepted your request. Your private conversation is now open.`,
+          read: false,
+          createdAt: now(),
+        })
+      }
       if (body.volunteerId && body.volunteerId !== previousVolunteerId) {
         const volunteer = data.users.find((user) => user.id === body.volunteerId && user.role === 'volunteer' && user.status === 'active')
         if (!volunteer) { const error = new Error('Volunteer not found'); error.status = 400; throw error }
@@ -951,11 +999,29 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
 
   app.get('/api/conversations', allowRoles('user', 'volunteer'), (req, res) => {
     const data = dataStore.snapshot()
-    const conversations = data.conversations.filter((conversation) => conversation.participantIds.includes(req.user.id)).map((conversation) => {
+    const conversations = data.conversations.filter((conversation) => {
+      if (!conversation.participantIds.includes(req.user.id)) return false
+      if (req.user.role === 'volunteer' && conversation.supportRequestId) {
+        const supportRequest = data.supportRequests.find((r) => r.id === conversation.supportRequestId)
+        if (supportRequest && !['in_progress', 'completed'].includes(supportRequest.status)) {
+          return false
+        }
+      }
+      return true
+    }).map((conversation) => {
       const otherId = conversation.participantIds.find((participantId) => participantId !== req.user.id)
       const other = data.users.find((user) => user.id === otherId)
       const lastMessage = conversation.messages.at(-1) || null
-      return { id: conversation.id, supportRequestId: conversation.supportRequestId, other: peerVisibleProfile(other, req.user.id), lastMessage, unread: conversation.messages.filter((message) => message.senderId !== req.user.id && !message.readBy.includes(req.user.id)).length, createdAt: conversation.createdAt }
+      const supportRequest = conversation.supportRequestId ? data.supportRequests.find((r) => r.id === conversation.supportRequestId) : null
+      return {
+        id: conversation.id,
+        supportRequestId: conversation.supportRequestId,
+        supportRequestStatus: supportRequest?.status || 'in_progress',
+        other: peerVisibleProfile(other, req.user.id),
+        lastMessage,
+        unread: conversation.messages.filter((message) => message.senderId !== req.user.id && !message.readBy.includes(req.user.id)).length,
+        createdAt: conversation.createdAt,
+      }
     })
     res.json({ conversations })
   })
@@ -963,6 +1029,12 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     const conversation = await dataStore.mutate((data) => {
       const item = data.conversations.find((conversation) => conversation.id === req.params.conversationId && conversation.participantIds.includes(req.user.id))
       if (!item) { const error = new Error('Conversation not found'); error.status = 404; throw error }
+      if (req.user.role === 'volunteer' && item.supportRequestId) {
+        const supportRequest = data.supportRequests.find((r) => r.id === item.supportRequestId)
+        if (supportRequest && !['in_progress', 'completed'].includes(supportRequest.status)) {
+          const error = new Error('Please accept the peer support request before viewing messages'); error.status = 403; throw error
+        }
+      }
       item.messages.forEach((message) => { if (!message.readBy.includes(req.user.id)) message.readBy.push(req.user.id) })
       return item
     })
@@ -973,6 +1045,12 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     const result = await dataStore.mutate((data) => {
       const conversation = data.conversations.find((item) => item.id === req.params.conversationId && item.participantIds.includes(req.user.id))
       if (!conversation) { const error = new Error('Conversation not found'); error.status = 404; throw error }
+      if (req.user.role === 'volunteer' && conversation.supportRequestId) {
+        const supportRequest = data.supportRequests.find((r) => r.id === conversation.supportRequestId)
+        if (supportRequest && !['in_progress', 'completed'].includes(supportRequest.status)) {
+          const error = new Error('Please accept the peer support request before sending messages'); error.status = 403; throw error
+        }
+      }
       const message = { id: id('message'), senderId: req.user.id, text, createdAt: now(), readBy: [req.user.id] }
       conversation.messages.push(message)
       const recipientId = conversation.participantIds.find((participantId) => participantId !== req.user.id)
@@ -984,6 +1062,43 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     app.locals.io?.to(result.recipientId).emit('message', { conversationId: req.params.conversationId, message: result.message })
     app.locals.io?.to(result.recipientId).emit('notification', { type: 'message', title: `${senderName} sent you a message` })
     res.status(201).json({ message: result.message })
+
+    if (req.user.role === 'user') {
+      const recipient = dataStore.snapshot().users.find((u) => u.id === result.recipientId)
+      if (recipient && recipient.role === 'volunteer' && (recipient.isDemo || recipient.email?.toLowerCase().endsWith('@mentalbridge.demo'))) {
+        setTimeout(async () => {
+          try {
+            const snap = dataStore.snapshot()
+            const conv = snap.conversations.find((c) => c.id === req.params.conversationId)
+            if (!conv) return
+            const volunteerMsgCount = conv.messages.filter((m) => m.senderId === recipient.id).length
+            const replyText = generateDemoVolunteerReply(recipient, text, volunteerMsgCount)
+            const replyMsg = await dataStore.mutate((data) => {
+              const liveConv = data.conversations.find((c) => c.id === req.params.conversationId)
+              if (!liveConv) return null
+              const msg = { id: id('message'), senderId: recipient.id, text: replyText, createdAt: now(), readBy: [recipient.id] }
+              liveConv.messages.push(msg)
+              data.notifications.push({
+                id: id('notification'),
+                userId: req.user.id,
+                type: 'message',
+                title: `${recipient.displayName} sent you a message`,
+                body: replyText.slice(0, 100),
+                read: false,
+                createdAt: now(),
+              })
+              return msg
+            })
+            if (replyMsg) {
+              app.locals.io?.to(req.user.id).emit('message', { conversationId: req.params.conversationId, message: replyMsg })
+              app.locals.io?.to(req.user.id).emit('notification', { type: 'message', title: `${recipient.displayName} sent you a message` })
+            }
+          } catch (err) {
+            console.error('Demo volunteer reply error:', err.message)
+          }
+        }, 1200)
+      }
+    }
   }))
 
   app.get('/api/notifications', (req, res) => {
