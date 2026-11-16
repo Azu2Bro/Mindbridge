@@ -115,7 +115,21 @@ async function normalizeDataStore(dataStore) {
       }
       data.meta.demoMatchingVersion = 3
     }
+    const adminEmails = [
+      ...String(process.env.INITIAL_ADMIN_EMAIL || 'tafhimul456@gmail.com').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
+    ]
+    const modEmails = [
+      ...String(process.env.INITIAL_MODERATOR_EMAILS || process.env.INITIAL_MODERATOR_EMAIL || 'tafhimulazwad@gmail.com').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
+    ]
     data.users.forEach((user) => {
+      const email = user.email?.trim().toLowerCase()
+      if (adminEmails.includes(email)) {
+        user.role = 'admin'
+        user.emailVerified = true
+      } else if (modEmails.includes(email) && user.role !== 'admin') {
+        user.role = 'moderator'
+        user.emailVerified = true
+      }
       user.bookmarks ||= []
       user.postBookmarks ||= []
       user.privacy ||= { showOnline: true, allowReminders: true }
@@ -431,6 +445,18 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
       user.tokenVersion = (user.tokenVersion || 0) + 1
       user.emailVerified = true
       delete user.accountSetupRequired
+      const adminEmails = [
+        ...String(process.env.INITIAL_ADMIN_EMAIL || 'tafhimul456@gmail.com').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
+      ]
+      const modEmails = [
+        ...String(process.env.INITIAL_MODERATOR_EMAILS || process.env.INITIAL_MODERATOR_EMAIL || 'tafhimulazwad@gmail.com').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
+      ]
+      const normalizedEmail = user.email?.trim().toLowerCase()
+      if (adminEmails.includes(normalizedEmail)) {
+        user.role = 'admin'
+      } else if (modEmails.includes(normalizedEmail) && user.role !== 'admin') {
+        user.role = 'moderator'
+      }
       data.emailVerifications = data.emailVerifications.filter((item) => item.userId !== user.id)
       data.passwordResets = data.passwordResets.filter((item) => item.id !== reset.id)
       data.auditLogs.push({ id: id('audit'), actorId: user.id, action: 'password.reset', createdAt: now() })

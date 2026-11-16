@@ -1,9 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import bcrypt from 'bcryptjs'
 import { appBaseUrl, passwordResetUrl } from '../email.js'
 import { analyzeSupportText, rankVolunteers } from '../ai.js'
 import { provisionAccounts } from '../provision-accounts.js'
 import { verifyGoogleCredential } from '../google-auth.js'
+import { createStaffAuthApp } from '../staff-auth-server.js'
 
 function setEnv(t, key, value) {
   const previous = process.env[key]
@@ -162,4 +164,65 @@ test('provisioning preserves existing passwords and leaves new volunteers unveri
   assert.equal(peer.accountSetupRequired, true)
   assert.equal(peer.availability, 'unavailable')
   assert.equal(data.auditLogs.length, 3)
+})
+
+test('provisioning updates role if user previously existed with a non-admin role', async (t) => {
+  setEnv(t, 'INITIAL_ADMIN_EMAIL', 'owner@example.com')
+  setEnv(t, 'INITIAL_MODERATOR_EMAILS', '')
+  setEnv(t, 'INITIAL_MODERATOR_EMAIL', '')
+  setEnv(t, 'INITIAL_VOLUNTEER_EMAILS', '')
+  const data = {
+    meta: { provisionedAccounts: ['admin:owner@example.com'] },
+    users: [{ id: 'owner', email: 'owner@example.com', role: 'user', passwordHash: 'existing', emailVerified: false }],
+    auditLogs: [],
+  }
+  const store = { mutate: async (fn) => fn(data) }
+  await provisionAccounts(store)
+  assert.equal(data.users[0].role, 'admin')
+  assert.equal(data.users[0].emailVerified, true)
+})
+
+test('staff auth login auto-heals admin role if user had non-admin role in DB', async (t) => {
+  setEnv(t, 'INITIAL_ADMIN_EMAIL', 'admin@example.com')
+  setEnv(t, 'JWT_SECRET', 'test-secret')
+  const passwordHash = await bcrypt.hash('Secret123!', 10)
+  const data = {
+    users: [{ id: 'admin-1', email: 'admin@example.com', role: 'user', passwordHash, status: 'active', emailVerified: true }],
+    auditLogs: [],
+  }
+  const store = {
+    init: async () => {},
+    data,
+    findUserByEmail: async (email) => data.users.find((u) => u.email === email),
+    appendAuditLog: async (entry) => data.auditLogs.push(entry),
+    mutate: async (fn) => fn(data),
+  }
+  const app = await createStaffAuthApp({ store })
+  const stack = app.router?.stack || app._router?.stack || []
+  const loginLayer = stack.find((layer) => layer.route && layer.route.path === '/api/auth/staff/login')
+  assert.ok(loginLayer, 'Login route exists')
+  const handler = loginLayer.route.stack[0].handle
+
+  let statusCode = 200
+  let responseData = null
+  const req = {
+    body: { email: 'admin@example.com', password: 'Secret123!' },
+  }
+  const res = {
+    status(code) { statusCode = code; return this },
+    json(payload) { responseData = payload; return this },
+  }
+
+  await new Promise((resolve, reject) => {
+    handler(req, res, (err) => {
+      if (err) reject(err)
+      else resolve()
+    })
+    setTimeout(resolve, 500)
+  })
+
+  assert.equal(statusCode, 200)
+  assert.equal(responseData?.user?.role, 'admin')
+  assert.ok(responseData?.token)
+  assert.equal(data.users[0].role, 'admin')
 })

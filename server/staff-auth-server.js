@@ -11,6 +11,7 @@ import { z } from 'zod'
 import { MongoStore } from './mongo-store.js'
 import { store as defaultStore } from './store.js'
 import { publicUser, signToken } from './auth.js'
+import { provisionAccounts } from './provision-accounts.js'
 
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
 const now = () => new Date().toISOString()
@@ -42,8 +43,9 @@ async function openStore(suppliedStore) {
 }
 
 async function findUser(dataStore, email) {
-  if (typeof dataStore.findUserByEmail === 'function') return dataStore.findUserByEmail(email)
-  return dataStore.data.users.find((user) => user.email === email)
+  const normalized = email?.trim().toLowerCase()
+  if (typeof dataStore.findUserByEmail === 'function') return dataStore.findUserByEmail(normalized)
+  return dataStore.data.users.find((user) => user.email?.trim().toLowerCase() === normalized)
 }
 
 async function writeAuditLog(dataStore, entry) {
@@ -53,6 +55,13 @@ async function writeAuditLog(dataStore, entry) {
 
 export async function createStaffAuthApp({ store } = {}) {
   const { dataStore, storageMode } = await openStore(store)
+  if (!store) {
+    try {
+      await provisionAccounts(dataStore)
+    } catch (provisionError) {
+      console.warn('Staff auth account provisioning notice:', provisionError.message)
+    }
+  }
   const app = express()
   // Render terminates TLS and forwards one client-IP hop to the Node process.
   app.set('trust proxy', 1)
@@ -68,8 +77,44 @@ export async function createStaffAuthApp({ store } = {}) {
   app.get('/api/staff/health', (req, res) => res.json({ status: 'ok', service: 'mentalbridge-staff-auth', storage: storageMode, timestamp: now() }))
   app.post('/api/auth/staff/login', asyncRoute(async (req, res) => {
     const body = credentialsSchema.parse(req.body)
-    const user = await findUser(dataStore, body.email)
+    const normalizedEmail = body.email.trim().toLowerCase()
+    let user = await findUser(dataStore, normalizedEmail)
     if (!user || user.status !== 'active' || !user.passwordHash || !(await bcrypt.compare(body.password, user.passwordHash))) return res.status(401).json({ error: 'Email or password is incorrect' })
+
+    const adminEmails = [
+      ...String(process.env.INITIAL_ADMIN_EMAIL || 'tafhimul456@gmail.com').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
+    ]
+    const modEmails = [
+      ...String(process.env.INITIAL_MODERATOR_EMAILS || process.env.INITIAL_MODERATOR_EMAIL || 'tafhimulazwad@gmail.com').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
+    ]
+
+    // Self-healing: if this account is configured as admin or moderator, ensure its role and verification are active
+    if (adminEmails.includes(normalizedEmail) && user.role !== 'admin') {
+      user.role = 'admin'
+      user.emailVerified = true
+      if (typeof dataStore.mutate === 'function') {
+        await dataStore.mutate((data) => {
+          const u = data.users.find((item) => item.email?.trim().toLowerCase() === normalizedEmail)
+          if (u) {
+            u.role = 'admin'
+            u.emailVerified = true
+          }
+        })
+      }
+    } else if (modEmails.includes(normalizedEmail) && !staffRoles.includes(user.role)) {
+      user.role = 'moderator'
+      user.emailVerified = true
+      if (typeof dataStore.mutate === 'function') {
+        await dataStore.mutate((data) => {
+          const u = data.users.find((item) => item.email?.trim().toLowerCase() === normalizedEmail)
+          if (u) {
+            u.role = 'moderator'
+            u.emailVerified = true
+          }
+        })
+      }
+    }
+
     if (!user.emailVerified) return res.status(403).json({ error: 'Verify your email before signing in.', verificationRequired: true })
     if (!staffRoles.includes(user.role)) {
       await writeAuditLog(dataStore, { id: id('audit'), actorId: user.id, action: 'staff.login.denied', metadata: { role: user.role }, createdAt: now() })

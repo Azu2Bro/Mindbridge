@@ -117,6 +117,11 @@ services:
       - key: MONGODB_DATABASE
         value: mentalbridge
 
+      - key: INITIAL_ADMIN_EMAIL
+        sync: false
+      - key: INITIAL_MODERATOR_EMAILS
+        sync: false
+
       # Permit browser requests only from the member app service.
       - key: CLIENT_ORIGIN
         fromService:

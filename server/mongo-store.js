@@ -35,11 +35,12 @@ export class MongoStore {
   }
 
   async findUserByEmail(email) {
+    const normalized = email?.trim().toLowerCase()
     const document = await this.collection.findOne(
       { _id: 'mentalbridge' },
       { projection: { 'payload.users': 1 } },
     )
-    return document?.payload?.users?.find((user) => user.email === email) || null
+    return document?.payload?.users?.find((user) => user.email?.trim().toLowerCase() === normalized) || null
   }
 
   async appendAuditLog(entry) {
@@ -51,6 +52,8 @@ export class MongoStore {
 
   async mutate(mutator) {
     const operation = this.writeQueue.then(async () => {
+      const document = await this.collection.findOne({ _id: 'mentalbridge' })
+      if (document?.payload) this.data = document.payload
       const result = await mutator(this.data)
       await this.persist()
       return structuredClone(result)
