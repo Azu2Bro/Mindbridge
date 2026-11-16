@@ -96,6 +96,7 @@ export const api = {
   adminStats: () => request('/admin/stats'),
   adminReports: () => request('/admin/reports'),
   updateReport: (reportId, status) => request(`/admin/reports/${reportId}`, json('PATCH', { status })),
+  deleteReport: (reportId) => request(`/admin/reports/${reportId}`, { method: 'DELETE' }),
   adminUsers: () => request('/admin/users'),
   updateUserStatus: (userId, status) => request(`/admin/users/${userId}`, json('PATCH', { status })),
   updateUserAccess: (userId, updates) => request(`/admin/users/${userId}`, json('PATCH', updates)),

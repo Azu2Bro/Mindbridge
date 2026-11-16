@@ -853,9 +853,18 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     })
     res.json({ report })
   }))
+  app.delete('/api/admin/reports/:reportId', allowRoles('moderator', 'admin'), asyncRoute(async (req, res) => {
+    await dataStore.mutate((data) => {
+      const index = data.reports.findIndex((report) => report.id === req.params.reportId)
+      if (index < 0) { const error = new Error('Report not found'); error.status = 404; throw error }
+      const [removed] = data.reports.splice(index, 1)
+      data.auditLogs.push({ id: id('audit'), actorId: req.user.id, action: 'report.deleted', targetId: removed.id, createdAt: now() })
+      return true
+    })
+    res.json({ success: true })
+  }))
   app.patch('/api/admin/posts/:postId', allowRoles('moderator', 'admin'), asyncRoute(async (req, res) => {
     const body = parse(z.object({ removed: z.boolean().optional(), locked: z.boolean().optional(), pinned: z.boolean().optional() }), req.body)
-    if (body.removed !== undefined && req.user.role !== 'admin') return res.status(403).json({ error: 'Only an administrator can remove or restore posts' })
     const post = await dataStore.mutate((data) => {
       const item = data.posts.find((post) => post.id === req.params.postId)
       if (!item) { const error = new Error('Post not found'); error.status = 404; throw error }
