@@ -889,61 +889,6 @@ function MessagesView({ showToast, user, onNavigate }) {
   )
 }
 
-function LegacyCommunityView({ showToast, user }) {
-  const [filter, setFilter] = useState('All stories')
-  const [posts, setPosts] = useState(starterPosts)
-  const [composerOpen, setComposerOpen] = useState(false)
-  const [postDraft, setPostDraft] = useState('')
-  const filters = ['All stories', 'Anxiety', 'Burnout', 'Small wins']
-  const visiblePosts = posts
-
-  useEffect(() => { api.posts(filter).then((result) => setPosts(result.posts)).catch(() => undefined) }, [filter])
-
-  const publish = async () => {
-    if (postDraft.trim().length < 10) return
-    try {
-      const { post } = await api.createPost({ title: postDraft.trim(), category: 'Small wins' })
-      setPosts([post, ...posts])
-      setPostDraft('')
-      setComposerOpen(false)
-      showToast('Your story was shared anonymously')
-    } catch (error) { showToast(error.message) }
-  }
-
-  const react = async (postId) => {
-    try {
-      const { post } = await api.reactToPost(postId)
-      setPosts((items) => items.map((item) => item.id === postId ? post : item))
-    } catch (error) { showToast(error.message) }
-  }
-
-  const report = async (postId) => {
-    try { await api.reportPost(postId, 'other', 'Potentially harmful or inappropriate content'); showToast('Report sent privately to moderators') }
-    catch (error) { showToast(error.message) }
-  }
-
-  return (
-    <div className="community-layout">
-      <section className="community-feed">
-        <div className="community-toolbar"><div className="filter-tabs">{filters.map((item) => <button key={item} className={filter === item ? 'active' : ''} onClick={() => setFilter(item)}>{item}</button>)}</div><button className="button button-dark" onClick={() => setComposerOpen(!composerOpen)}><Plus size={16} /> Share something</button></div>
-        {composerOpen && <div className="community-composer"><div><span className="avatar">{user.anonymousName.slice(0, 2).toUpperCase()}</span><div><b>Share as {user.anonymousName}</b><small>Your identity stays private</small></div></div><textarea value={postDraft} onChange={(e) => setPostDraft(e.target.value)} placeholder="What would you like the community to hear?" autoFocus /><div><span><ShieldCheck size={14} /> All posts follow community care guidelines</span><button className="button button-dark" disabled={postDraft.trim().length < 10} onClick={publish}>Share anonymously</button></div></div>}
-        <div className="community-posts">{visiblePosts.map((post) => {
-          const isLiked = Boolean(post.liked)
-          return <article className="community-post" key={post.id}>
-            <div className="community-post-head"><div className="post-meta"><span className="avatar" style={{ background: post.avatarColor || post.color }}>{post.initials}</span><span><b>{post.author}</b><small>{post.time} · Anonymous member</small></span></div><button className="icon-button"><MoreHorizontal size={18} /></button></div>
-            <span className="category-tag">{post.category}</span><h2>{post.title}</h2><p>{post.body}</p>
-            <div className="community-post-actions"><button className={isLiked ? 'liked' : ''} onClick={() => react(post.id)}><Heart size={17} fill={isLiked ? 'currentColor' : 'none'} /> {post.likes}</button><button><MessageSquare size={17} /> {post.comments} replies</button><button onClick={() => showToast('Post bookmarked')}><Bookmark size={17} /> Save</button><button className="report" onClick={() => report(post.id)}><Flag size={15} /> Report</button></div>
-          </article>
-        })}</div>
-      </section>
-      <aside className="community-rail">
-        <div className="rail-card guidelines-card"><span className="status-icon sage"><ShieldCheck size={20} /></span><h3>A community built on care</h3><p>Lead with empathy, respect privacy, and share from your own experience.</p><button>Read community guidelines <ArrowRight size={14} /></button></div>
-        <div className="rail-card topic-card"><span className="eyebrow">TRENDING GENTLY</span><h3>What people are talking about</h3>{[['Setting boundaries', '34 conversations'], ['Starting again', '28 conversations'], ['Sunday anxiety', '21 conversations']].map(([topic, count], index) => <button key={topic}><span>{index + 1}</span><div><b>{topic}</b><small>{count}</small></div><ChevronRight size={16} /></button>)}</div>
-      </aside>
-    </div>
-  )
-}
-
 function CommunityView({ showToast, user }) {
   const [filter, setFilter] = useState('All stories')
   const [posts, setPosts] = useState([])
@@ -986,7 +931,7 @@ function CommunityView({ showToast, user }) {
     if (!comment.trim()) return
     try {
       const { comment: created } = await api.commentOnPost(postId, comment.trim(), replyTarget?.id)
-      setPosts((items) => items.map((post) => post.id === postId ? { ...post, comments: [...post.comments, created], commentCount: post.commentCount + 1 } : post))
+      setPosts((items) => items.map((post) => post.id === postId ? { ...post, comments: [...(post.comments || []), created], commentCount: (post.commentCount || 0) + 1 } : post))
       setComment('')
       setReplyTarget(null)
       showToast('Reply shared anonymously')

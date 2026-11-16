@@ -310,8 +310,8 @@ body { font-size: 16px; line-height: 1.55; }
 .pinned-label { padding: 5px 9px; border-radius: 999px; color: #7d6129; background: #f6ebd2; font-size: 13.5px; font-weight: 700; }
 .comments-panel { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
 .comments-panel > h3 { font-size: 15.5px; }
-.comment { display: flex; gap: 10px; padding: 12px 0; border-top: 1px solid #edf0eb; }
-.comment-reply { margin-left: 32px; padding-left: 12px; border-left: 2px solid var(--green-soft); }
+.comment { display: flex; gap: 10px; padding: 12px 0; border-top: 1px solid var(--line); }
+.comment-reply { margin-left: 32px; padding-left: 12px; border-left: 2px solid var(--green-2); }
 .comment b { font-size: 14.5px; }
 .comment p { margin: 3px 0; color: var(--ink-2); font-size: 14.5px; }
 .comment small { color: var(--muted); font-size: 13.5px; }
@@ -527,7 +527,11 @@ body { font-size: 16px; line-height: 1.55; }
 [data-theme='dark'] .modal-head,
 [data-theme='dark'] .chat-head,
 [data-theme='dark'] .composer,
-[data-theme='dark'] .conversation-list { border-color: var(--line); }
+[data-theme='dark'] .conversation-list,
+[data-theme='dark'] .popover-head,
+[data-theme='dark'] .notification-item,
+[data-theme='dark'] .profile-summary { border-color: var(--line); }
+[data-theme='dark'] .notification-item.unread { background: var(--green-soft); }
 [data-theme='dark'] .community-post,
 [data-theme='dark'] .post-preview { border-color: var(--line); color: var(--ink); background: var(--paper); }
 [data-theme='dark'] .community-post h2,
