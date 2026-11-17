@@ -33,7 +33,7 @@ async function openStore(suppliedStore) {
     return { dataStore: suppliedStore, storageMode: 'test' }
   }
   if (process.env.MONGODB_URI) {
-    const dataStore = new MongoStore(process.env.MONGODB_URI)
+    const dataStore = new MongoStore(process.env.MONGODB_URI, process.env.MONGODB_DATABASE)
     await dataStore.init()
     return { dataStore, storageMode: 'mongodb' }
   }
@@ -82,10 +82,12 @@ export async function createStaffAuthApp({ store } = {}) {
     if (!user || user.status !== 'active' || !user.passwordHash || !(await bcrypt.compare(body.password, user.passwordHash))) return res.status(401).json({ error: 'Email or password is incorrect' })
 
     const adminEmails = [
+      'admin@mentalbridge.demo',
       'tafhimul456@gmail.com',
       ...String(process.env.INITIAL_ADMIN_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
     ]
     const modEmails = [
+      'moderator@mentalbridge.demo',
       'tafhimulazwad@gmail.com',
       ...String(process.env.INITIAL_MODERATOR_EMAILS || process.env.INITIAL_MODERATOR_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
     ]

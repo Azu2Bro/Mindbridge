@@ -2,7 +2,7 @@ import { MongoClient } from 'mongodb'
 import { createSeedData } from './seed.js'
 
 export class MongoStore {
-  constructor(uri, databaseName = process.env.MONGODB_DATABASE || 'mentalbridge') {
+  constructor(uri, databaseName = process.env.MONGODB_DATABASE) {
     this.client = new MongoClient(uri)
     this.databaseName = databaseName
     this.data = null
@@ -12,7 +12,12 @@ export class MongoStore {
   async init() {
     if (this.data) return this
     await this.client.connect()
-    this.collection = this.client.db(this.databaseName).collection('application_state')
+    const db = this.databaseName
+      ? this.client.db(this.databaseName)
+      : (this.client.options?.dbName && this.client.options.dbName !== 'test'
+          ? this.client.db()
+          : this.client.db('mentalbridge'))
+    this.collection = db.collection('application_state')
     const document = await this.collection.findOne({ _id: 'mentalbridge' })
     if (document?.payload) this.data = document.payload
     else {

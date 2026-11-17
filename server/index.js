@@ -636,10 +636,12 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
       user.emailVerified = true
       delete user.accountSetupRequired
       const adminEmails = [
+        'admin@mentalbridge.demo',
         'tafhimul456@gmail.com',
         ...String(process.env.INITIAL_ADMIN_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
       ]
       const modEmails = [
+        'moderator@mentalbridge.demo',
         'tafhimulazwad@gmail.com',
         ...String(process.env.INITIAL_MODERATOR_EMAILS || process.env.INITIAL_MODERATOR_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
       ]
