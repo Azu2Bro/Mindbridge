@@ -1253,11 +1253,32 @@ function AdminView({ showToast, user }) {
   const load = async () => {
     setError('')
     try {
-      const [stats, reportResult, userResult, volunteerResult, applicationResult, postResult, resourceResult, logResult] = await Promise.all([
-        api.adminStats(), api.adminReports(), api.adminUsers(), api.volunteers([]), api.adminVolunteerApplications(), api.adminPosts(), api.adminResources(),
-        user.role === 'admin' ? api.auditLogs() : Promise.resolve({ logs: [] }),
+      const [stats, reportResult, applicationResult, postResult] = await Promise.all([
+        api.adminStats(),
+        api.adminReports(),
+        api.adminVolunteerApplications(),
+        api.adminPosts(),
       ])
-      setData({ stats: stats.stats, reports: reportResult.reports, users: userResult.users, volunteers: volunteerResult.volunteers, applications: applicationResult.applications, posts: postResult.posts, resources: resourceResult.resources, logs: logResult.logs })
+      setData((current) => ({
+        ...current,
+        stats: stats.stats,
+        reports: reportResult.reports,
+        applications: applicationResult.applications,
+        posts: postResult.posts,
+      }))
+
+      Promise.all([
+        api.adminUsers(),
+        api.adminResources(),
+        user.role === 'admin' ? api.auditLogs() : Promise.resolve({ logs: [] }),
+      ]).then(([userResult, resourceResult, logResult]) => {
+        setData((current) => ({
+          ...current,
+          users: userResult.users,
+          resources: resourceResult.resources,
+          logs: logResult.logs,
+        }))
+      }).catch((tabError) => console.warn('Background admin data fetch notice:', tabError.message))
     } catch (requestError) { setError(requestError.message) }
   }
   useEffect(() => { load() }, [])

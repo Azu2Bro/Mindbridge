@@ -279,6 +279,7 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
   else if (process.env.NODE_ENV !== 'production') app.use(cors({ origin: ['http://localhost:5173', 'http://127.0.0.1:5173'], credentials: true }))
   app.use(express.json({ limit: '512kb' }))
   app.use('/api/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 80, standardHeaders: true, legacyHeaders: false }))
+  app.use('/api/auth/staff', rateLimit({ windowMs: 15 * 60 * 1000, limit: 12, standardHeaders: true, legacyHeaders: false, message: { error: 'Too many staff sign-in attempts. Try again in a few minutes.' } }))
 
   app.get('/api/health', (req, res) => {
     const ai = process.env.NODE_ENV === 'production' ? 'groq' : (process.env.AI_PROVIDER || 'ollama')
@@ -499,6 +500,64 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     if (staffRoles.includes(user.role)) {
       return res.status(403).json({ error: 'This account cannot sign in from here. Please verify your credentials or contact support.' })
     }
+    res.json({ token: signToken(user), user: publicUser(user) })
+  }))
+
+  // Staff portal authentication (also available on the main server to eliminate free-tier sleep latency)
+  app.post('/api/auth/staff/login', asyncRoute(async (req, res) => {
+    const body = parse(credentialsSchema, req.body)
+    const normalizedEmail = body.email.trim().toLowerCase()
+    let user = dataStore.data.users.find((item) => item.email?.trim().toLowerCase() === normalizedEmail)
+    if (!user || user.status !== 'active' || !user.passwordHash || !(await bcrypt.compare(body.password, user.passwordHash))) {
+      return res.status(401).json({ error: 'Email or password is incorrect' })
+    }
+
+    const adminEmails = [
+      'admin@mentalbridge.demo',
+      'tafhimul456@gmail.com',
+      ...String(process.env.INITIAL_ADMIN_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
+    ]
+    const modEmails = [
+      'moderator@mentalbridge.demo',
+      'tafhimulazwad@gmail.com',
+      ...String(process.env.INITIAL_MODERATOR_EMAILS || process.env.INITIAL_MODERATOR_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
+    ]
+
+    // Self-healing: if this account is configured as admin or moderator, ensure its role and verification are active
+    if (adminEmails.includes(normalizedEmail) && user.role !== 'admin') {
+      user.role = 'admin'
+      user.emailVerified = true
+      await dataStore.mutate((data) => {
+        const u = data.users.find((item) => item.email?.trim().toLowerCase() === normalizedEmail)
+        if (u) {
+          u.role = 'admin'
+          u.emailVerified = true
+        }
+      })
+    } else if (modEmails.includes(normalizedEmail) && !staffRoles.includes(user.role)) {
+      user.role = 'moderator'
+      user.emailVerified = true
+      await dataStore.mutate((data) => {
+        const u = data.users.find((item) => item.email?.trim().toLowerCase() === normalizedEmail)
+        if (u) {
+          u.role = 'moderator'
+          u.emailVerified = true
+        }
+      })
+    }
+
+    if (!user.emailVerified) return res.status(403).json({ error: 'Verify your email before signing in.', verificationRequired: true })
+    if (!staffRoles.includes(user.role)) {
+      dataStore.mutate((data) => {
+        data.auditLogs.push({ id: id('audit'), actorId: user.id, action: 'staff.login.denied', metadata: { role: user.role }, createdAt: now() })
+      }).catch(() => {})
+      return res.status(403).json({ error: 'This account does not have moderator or administrator access.' })
+    }
+
+    dataStore.mutate((data) => {
+      data.auditLogs.push({ id: id('audit'), actorId: user.id, action: 'staff.login', metadata: { role: user.role }, createdAt: now() })
+    }).catch(() => {})
+
     res.json({ token: signToken(user), user: publicUser(user) })
   }))
 

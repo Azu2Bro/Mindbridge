@@ -1,9 +1,6 @@
 import { io } from 'socket.io-client'
 
 const TOKEN_KEY = 'mentalbridge-token'
-const staffAuthHost = import.meta.env.VITE_STAFF_AUTH_URL || (import.meta.env.DEV ? 'http://127.0.0.1:3002' : '')
-const staffAuthOrigin = staffAuthHost ? ( /^https?:\/\//.test(staffAuthHost) ? staffAuthHost : `https://${staffAuthHost}` ).replace(/\/$/, '') : ''
-const staffApiBase = staffAuthOrigin ? `${staffAuthOrigin}/api` : ''
 
 export const session = {
   getToken: () => localStorage.getItem(TOKEN_KEY),
@@ -52,10 +49,7 @@ export const api = {
   googleConfig: () => request('/auth/google/config'),
   login: (credentials) => request('/auth/login', json('POST', credentials)),
   googleLogin: (credential) => request('/auth/google', json('POST', { credential })),
-  staffLogin: (credentials) => {
-    if (!staffApiBase) return Promise.reject(new Error('The staff authentication server is not configured.'))
-    return request('/auth/staff/login', json('POST', credentials), staffApiBase)
-  },
+  staffLogin: (credentials) => request('/auth/staff/login', json('POST', credentials)),
   register: (details) => request('/auth/register', json('POST', details)),
   applyVolunteer: (details) => request('/volunteer-applications', json('POST', details)),
   applyVolunteerAsMember: (details) => request('/users/me/volunteer-application', json('POST', details)),

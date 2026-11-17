@@ -45,7 +45,7 @@ async function openStore(suppliedStore) {
 async function findUser(dataStore, email) {
   const normalized = email?.trim().toLowerCase()
   if (typeof dataStore.findUserByEmail === 'function') return dataStore.findUserByEmail(normalized)
-  return dataStore.data.users.find((user) => user.email?.trim().toLowerCase() === normalized)
+  return dataStore.data?.users?.find((user) => user.email?.trim().toLowerCase() === normalized)
 }
 
 async function writeAuditLog(dataStore, entry) {
@@ -121,10 +121,12 @@ export async function createStaffAuthApp({ store } = {}) {
 
     if (!user.emailVerified) return res.status(403).json({ error: 'Verify your email before signing in.', verificationRequired: true })
     if (!staffRoles.includes(user.role)) {
-      await writeAuditLog(dataStore, { id: id('audit'), actorId: user.id, action: 'staff.login.denied', metadata: { role: user.role }, createdAt: now() })
+      writeAuditLog(dataStore, { id: id('audit'), actorId: user.id, action: 'staff.login.denied', metadata: { role: user.role }, createdAt: now() }).catch(() => {})
       return res.status(403).json({ error: 'This account does not have moderator or administrator access.' })
     }
-    await writeAuditLog(dataStore, { id: id('audit'), actorId: user.id, action: 'staff.login', metadata: { role: user.role }, createdAt: now() })
+    writeAuditLog(dataStore, { id: id('audit'), actorId: user.id, action: 'staff.login', metadata: { role: user.role }, createdAt: now() }).catch((logError) => {
+      console.warn('Failed to record staff sign-in audit entry:', logError.message)
+    })
     res.json({ token: signToken(user), user: publicUser(user) })
   }))
 
