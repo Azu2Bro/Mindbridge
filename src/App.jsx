@@ -141,6 +141,19 @@ const resourceImageMap = {
 }
 const resourceImage = (resource) => resource.image || resourceImageMap[resource.category]
 
+function presenceLabel(person) {
+  if (!person || person.presenceHidden) return 'Presence hidden'
+  if (person.online) return 'Online'
+  if (!person.lastSeenAt) return 'Offline'
+  const elapsed = Date.now() - new Date(person.lastSeenAt).getTime()
+  if (!Number.isFinite(elapsed) || elapsed < 60000) return 'Last seen just now'
+  const minutes = Math.floor(elapsed / 60000)
+  if (minutes < 60) return `Last seen ${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `Last seen ${hours}h ago`
+  return `Last seen ${new Date(person.lastSeenAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}`
+}
+
 const conversations = [
   { id: 1, name: 'Maya R.', initials: 'MR', preview: 'That sounds like a lot to carry alone.', time: '10:42', unread: 2, color: '#f2bf8e', online: true },
   { id: 2, name: 'Support coordinator', initials: 'SC', preview: 'Your check-in summary is ready.', time: 'Yesterday', unread: 0, color: '#8cb7a3' },
@@ -178,6 +191,7 @@ function App() {
     update()
     const socket = connectRealtime()
     socket.on('notification', update)
+    socket.on('presence', (presence) => window.dispatchEvent(new CustomEvent('mentalbridge:presence', { detail: presence })))
     window.addEventListener('mentalbridge:notifications', update)
     return () => { socket.disconnect(); window.removeEventListener('mentalbridge:notifications', update) }
   }, [user?.id])
@@ -248,6 +262,12 @@ function App() {
     const socket = connectRealtime({
       notification: (notification) => { showToast(notification.title); refreshNavCounts() },
       message: () => { window.dispatchEvent(new CustomEvent('mentalbridge:message')); refreshNavCounts() },
+      presence: (presence) => window.dispatchEvent(new CustomEvent('mentalbridge:presence', { detail: presence })),
+      'support:updated': () => {
+        window.dispatchEvent(new CustomEvent('mentalbridge:data'))
+        window.dispatchEvent(new CustomEvent('mentalbridge:message'))
+        refreshNavCounts()
+      },
     })
     const refreshCounts = () => refreshNavCounts()
     window.addEventListener('mentalbridge:data', refreshCounts)
@@ -425,6 +445,13 @@ function HomeView({ onNavigate, onSupport, moodEntries, setMoodEntries, showToas
   const [selectedMood, setSelectedMood] = useState(null)
   const [dashboard, setDashboard] = useState(null)
   useEffect(() => { api.dashboard().then(setDashboard).catch(() => undefined) }, [])
+  useEffect(() => {
+    const updatePresence = (event) => setDashboard((current) => current?.currentSupport?.volunteer?.id === event.detail?.userId
+      ? { ...current, currentSupport: { ...current.currentSupport, volunteer: { ...current.currentSupport.volunteer, ...event.detail } } }
+      : current)
+    window.addEventListener('mentalbridge:presence', updatePresence)
+    return () => window.removeEventListener('mentalbridge:presence', updatePresence)
+  }, [])
   const currentVolunteer = dashboard?.currentSupport?.volunteer
   const logMood = async (mood) => {
     setSelectedMood(mood.score)
@@ -486,8 +513,8 @@ function HomeView({ onNavigate, onSupport, moodEntries, setMoodEntries, showToas
         <section className="rail-card session-card">
           <div className="rail-card-head"><span className="eyebrow">NEXT CHECK-IN</span><button aria-label="Check-in information" onClick={() => showToast('Use Messages to continue now, or Peer support to manage this request.')}><Info size={18} /></button></div>
           {currentVolunteer ? <><div className="session-person">
-            <span className="avatar large" style={{ background: currentVolunteer.avatarColor }}>{currentVolunteer.displayName.split(' ').map((part) => part[0]).join('').slice(0, 2)}<span className="online-dot" /></span>
-            <div><h3>{currentVolunteer.displayName}</h3><p>Peer supporter · {dashboard.currentSupport.matchScore}% match</p></div>
+            <span className="avatar large" style={{ background: currentVolunteer.avatarColor }}>{currentVolunteer.displayName.split(' ').map((part) => part[0]).join('').slice(0, 2)}{currentVolunteer.online && <span className="online-dot" />}</span>
+            <div><h3>{currentVolunteer.displayName}</h3><p>Peer supporter · {dashboard.currentSupport.matchScore}% match</p><small className="presence-text">{presenceLabel(currentVolunteer)}</small></div>
           </div>
           <div className="session-time"><CalendarDays size={17} /><div><b>{dashboard.currentSupport.sessionAt ? new Date(dashboard.currentSupport.sessionAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : 'Check-in when you’re ready'}</b><span>Private text conversation</span></div></div>
           {dashboard.currentSupport.status === 'in_progress' ? <button className="button button-dark full" onClick={() => onNavigate('messages')}>Open conversation <MessageCircle size={16} /></button> : <button className="button button-secondary full" disabled title="Messaging opens once your supporter accepts your request">Awaiting supporter acceptance</button>}</> : <div className="no-session"><HeartHandshake size={28} /><h3>Your next connection starts here</h3><p>Share what is going on and review your peer matches.</p><button className="button button-dark full" onClick={onSupport}>Find support</button></div>}
@@ -556,7 +583,7 @@ function LegacySupportView({ onSupport, onNavigate }) {
         <div className="section-heading"><div><span className="eyebrow">YOUR CURRENT MATCH</span><h2>Support that feels understood</h2></div><span className="safe-label"><LockKeyhole size={14} /> Only visible to you and your care team</span></div>
         {matched ? <div className="match-card featured-match">
           <div className="match-profile">
-            <span className="avatar xl" style={{ background: matched.avatarColor }}>{matched.displayName.split(' ').map((part) => part[0]).join('').slice(0, 2)}<span className="online-dot" /></span>
+            <span className="avatar xl" style={{ background: matched.avatarColor }}>{matched.displayName.split(' ').map((part) => part[0]).join('').slice(0, 2)}{matched.online && <span className="online-dot" />}</span>
             <div><div className="match-name"><h3>{matched.displayName}</h3><span><Sparkles size={13} /> {current.matchScore}% match</span></div><p>Peer supporter · {matched.yearsActive || 0} years on MentalBridge</p><div className="expertise-row">{(matched.expertise || []).map((tag) => <span key={tag}>{tag}</span>)}</div></div>
           </div>
           <blockquote>“{matched.bio}”</blockquote>
@@ -593,6 +620,17 @@ function SupportView({ onSupport, onNavigate, user, showToast }) {
     window.addEventListener('mentalbridge:data', load)
     return () => window.removeEventListener('mentalbridge:data', load)
   }, [])
+  useEffect(() => {
+    const updatePresence = (event) => {
+      const presence = event.detail
+      if (!presence?.userId) return
+      setRequests((items) => items.map((request) => request.volunteer?.id === presence.userId
+        ? { ...request, volunteer: { ...request.volunteer, ...presence } }
+        : request))
+    }
+    window.addEventListener('mentalbridge:presence', updatePresence)
+    return () => window.removeEventListener('mentalbridge:presence', updatePresence)
+  }, [])
 
   if (user.role === 'volunteer') return <SupportQueueView requests={requests} loading={loading} error={error} reload={load} user={user} showToast={showToast} onNavigate={onNavigate} />
 
@@ -612,7 +650,7 @@ function SupportView({ onSupport, onNavigate, user, showToast }) {
     {error && <InlineError message={error} onRetry={load} />}
     <div className="status-strip"><div><span className="status-icon coral"><Clock3 size={19} /></span><p><b>{requests.filter((request) => !['completed', 'declined'].includes(request.status)).length} active request</b><small>{loading ? 'Loading…' : current ? current.status.replaceAll('_', ' ') : 'Ready when you are'}</small></p></div><div><span className="status-icon sage"><UserRoundCheck size={19} /></span><p><b>{matched?.displayName || 'No current match'}</b><small>{matched ? `${current.matchScore}% relevance` : 'We will keep you informed'}</small></p></div><div><span className="status-icon gold"><MessageCircle size={19} /></span><p><b>{current?.status === 'in_progress' ? 'Private messaging ready' : 'Private messaging'}</b><small>{current?.status === 'in_progress' ? 'Open your conversation anytime' : current?.status === 'assigned' ? 'Available once supporter accepts' : 'Available after matching'}</small></p></div></div>
     <section className="section-block"><div className="section-heading"><div><span className="eyebrow">YOUR CURRENT MATCH</span><h2>Support that feels understood</h2></div><span className="safe-label"><LockKeyhole size={14} /> Only visible to you and your supporter</span></div>
-      {matched ? <div className="match-card featured-match"><div className="match-profile"><span className="avatar xl" style={{ background: matched.avatarColor }}>{matched.displayName.split(' ').map((part) => part[0]).join('').slice(0, 2)}<span className="online-dot" /></span><div><div className="match-name"><h3>{matched.displayName}</h3><span><Sparkles size={13} /> {current.matchScore}% match</span></div><p>Peer supporter · {matched.yearsActive || 0} years on MentalBridge</p><div className="expertise-row">{(matched.expertise || []).map((tag) => <span key={tag}>{tag}</span>)}</div></div></div><blockquote>“{matched.bio}”</blockquote><div className="match-actions">{current.status === 'in_progress' ? <button className="button button-dark" onClick={() => onNavigate('messages')}>Message {matched.displayName.split(' ')[0]} <MessageCircle size={16} /></button> : <button className="button button-secondary" disabled title="Messaging opens once your supporter accepts your request">Awaiting supporter acceptance</button>}<button className="button button-secondary" onClick={() => setPlanOpen(true)}>View support plan</button><button className="button button-secondary button-danger-solid" onClick={cancelRequest}>Cancel request</button></div></div> : current ? <div className="empty-match"><ShieldCheck size={28} /><div><h3>{current.status === 'pending' ? 'Your request is in the waiting queue' : 'Awaiting supporter response'}</h3><p>{current.status === 'pending' ? 'Your request will be connected when an available volunteer accepts it.' : 'Your chosen supporter will review your request.'} MentalBridge is not an emergency service.</p></div></div> : <div className="empty-match"><HeartHandshake size={28} /><div><h3>Your next connection can start here</h3><p>Create a private support request and choose your peer supporter.</p></div><button className="button button-dark" onClick={onSupport}>Find peer support</button></div>}
+      {matched ? <div className="match-card featured-match"><div className="match-profile"><span className="avatar xl" style={{ background: matched.avatarColor }}>{matched.displayName.split(' ').map((part) => part[0]).join('').slice(0, 2)}{matched.online && <span className="online-dot" />}</span><div><div className="match-name"><h3>{matched.displayName}</h3><span><Sparkles size={13} /> {current.matchScore}% match</span></div><p>Peer supporter · {matched.yearsActive || 0} years on MentalBridge</p><small className="presence-text">{presenceLabel(matched)}</small><div className="expertise-row">{(matched.expertise || []).map((tag) => <span key={tag}>{tag}</span>)}</div></div></div><blockquote>“{matched.bio}”</blockquote><div className="match-actions">{current.status === 'in_progress' ? <button className="button button-dark" onClick={() => onNavigate('messages')}>Message {matched.displayName.split(' ')[0]} <MessageCircle size={16} /></button> : <button className="button button-secondary" disabled title="Messaging opens once your supporter accepts your request">Awaiting supporter acceptance</button>}<button className="button button-secondary" onClick={() => setPlanOpen(true)}>View support plan</button><button className="button button-secondary button-danger-solid" onClick={cancelRequest}>Cancel request</button></div></div> : current ? <div className="empty-match"><ShieldCheck size={28} /><div><h3>{current.status === 'pending' ? 'Your request is in the waiting queue' : 'Awaiting supporter response'}</h3><p>{current.status === 'pending' ? 'Your request will be connected when an available volunteer accepts it.' : 'Your chosen supporter will review your request.'} MentalBridge is not an emergency service.</p></div></div> : <div className="empty-match"><HeartHandshake size={28} /><div><h3>Your next connection can start here</h3><p>Create a private support request and choose your peer supporter.</p></div><button className="button button-dark" onClick={onSupport}>Find peer support</button></div>}
     </section>
     <section className="section-block"><div className="section-heading"><div><span className="eyebrow">REQUEST HISTORY</span><h2>Your support journey</h2></div></div><div className="history-list">{requests.length ? requests.slice().reverse().map((request) => <div className="history-item" key={request.id}><div><b>{request.tags.join(' · ')}</b><p>{request.summary}</p><small>{new Date(request.createdAt).toLocaleString()} · {request.status.replaceAll('_', ' ')}</small></div>{request.status === 'completed' && !request.feedback && <button className="button button-secondary" onClick={() => setFeedbackId(request.id)}>Leave feedback</button>}{request.feedback && <span className="rating-display">{'★'.repeat(request.feedback.rating)}</span>}</div>) : <p className="empty-copy">No support requests yet.</p>}</div></section>
     {planOpen && <SimpleModal title="Your support plan" onClose={() => setPlanOpen(false)}><p><b>Current focus:</b> {current.priorities.join(', ')}</p><p><b>Supporter:</b> {matched.displayName}</p><p><b>Next step:</b> Continue your private conversation at a pace that feels comfortable. You can pause or cancel at any time.</p><button className="button button-dark" onClick={() => { setPlanOpen(false); onNavigate('messages') }}>Open conversation</button></SimpleModal>}
@@ -624,7 +662,7 @@ function SupportQueueView({ requests, loading, error, reload, user, showToast, o
   const [busy, setBusy] = useState('')
   const update = async (requestId, updates) => {
     setBusy(requestId)
-    try { await api.updateSupportRequest(requestId, updates); await reload(); window.dispatchEvent(new CustomEvent('mentalbridge:counts')); showToast('Support request updated') }
+    try { await api.updateSupportRequest(requestId, updates); await reload(); window.dispatchEvent(new CustomEvent('mentalbridge:counts')); window.dispatchEvent(new CustomEvent('mentalbridge:data')); window.dispatchEvent(new CustomEvent('mentalbridge:message')); showToast(updates.status === 'completed' ? 'Support session completed. Conversation closed.' : 'Support request updated') }
     catch (requestError) { showToast(requestError.message) }
     finally { setBusy('') }
   }
@@ -820,6 +858,17 @@ function MessagesView({ showToast, user, onNavigate }) {
     window.addEventListener('mentalbridge:message', refresh)
     return () => window.removeEventListener('mentalbridge:message', refresh)
   }, [selected])
+  useEffect(() => {
+    const updatePresence = (event) => {
+      const presence = event.detail
+      if (!presence?.userId) return
+      setConversationItems((items) => items.map((conversation) => conversation.other.id === presence.userId
+        ? { ...conversation, other: { ...conversation.other, ...presence } }
+        : conversation))
+    }
+    window.addEventListener('mentalbridge:presence', updatePresence)
+    return () => window.removeEventListener('mentalbridge:presence', updatePresence)
+  }, [])
 
   // Polling fallback ensures real-time reliability even when WebSocket reconnections occur
   useEffect(() => {
@@ -846,10 +895,36 @@ function MessagesView({ showToast, user, onNavigate }) {
   const activeConversation = conversationItems.find((item) => item.id === selected)
   const other = activeConversation?.other
   const isAwaitingAcceptance = activeConversation?.supportRequestStatus === 'assigned'
+  const isCompleted = activeConversation?.supportRequestStatus === 'completed' || activeConversation?.supportRequestStatus === 'declined'
+  const [confirmComplete, setConfirmComplete] = useState(false)
+  const [completing, setCompleting] = useState(false)
+
+  useEffect(() => {
+    setConfirmComplete(false)
+  }, [selected])
+
+  const completeChat = async () => {
+    if (!activeConversation?.supportRequestId) return
+    setCompleting(true)
+    try {
+      await api.updateSupportRequest(activeConversation.supportRequestId, { status: 'completed' })
+      setConfirmComplete(false)
+      await loadConversations()
+      window.dispatchEvent(new CustomEvent('mentalbridge:counts'))
+      window.dispatchEvent(new CustomEvent('mentalbridge:data'))
+      window.dispatchEvent(new CustomEvent('mentalbridge:message'))
+      showToast('Support session completed. Conversation closed.')
+    } catch (err) {
+      showToast(err.message)
+    } finally {
+      setCompleting(false)
+    }
+  }
+
   const filteredConversations = conversationItems.filter((conversation) => `${conversation.other.displayName} ${conversation.lastMessage?.text || ''}`.toLowerCase().includes(searchText.toLowerCase()))
 
   const sendMessage = async () => {
-    if (!draft.trim() || isAwaitingAcceptance) return
+    if (!draft.trim() || isAwaitingAcceptance || isCompleted) return
     const text = draft.trim()
     setDraft('')
     try {
@@ -867,14 +942,14 @@ function MessagesView({ showToast, user, onNavigate }) {
         <label className="inline-search"><Search size={16} /><input placeholder="Search messages" value={searchText} onChange={(event) => setSearchText(event.target.value)} /></label>
         {error && <InlineError message={error} onRetry={() => { setError(''); loadConversations().catch((requestError) => setError(requestError.message)) }} compact />}
         {filteredConversations.map((conversation) => <button key={conversation.id} className={`conversation-item ${selected === conversation.id ? 'selected' : ''}`} onClick={() => setSelected(conversation.id)}>
-          <span className="avatar" style={{ background: conversation.other.avatarColor }}>{conversation.other.displayName.split(' ').map((part) => part[0]).join('').slice(0, 2)}{conversation.other.availability === 'available' && <span className="online-dot" />}</span>
-          <span className="conversation-copy"><span><b>{conversation.other.displayName}</b><small>{conversation.lastMessage ? new Date(conversation.lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</small></span><span><p>{conversation.lastMessage?.text || 'Start the conversation when you feel ready.'}</p>{conversation.unread > 0 && <em>{conversation.unread}</em>}</span></span>
+          <span className="avatar" style={{ background: conversation.other.avatarColor }}>{conversation.other.displayName.split(' ').map((part) => part[0]).join('').slice(0, 2)}{conversation.other.online && <span className="online-dot" />}</span>
+          <span className="conversation-copy"><span><b>{conversation.other.displayName}</b><small className={conversation.supportRequestStatus === 'completed' ? 'chat-status-pill' : ''}>{conversation.supportRequestStatus === 'completed' ? 'Completed' : conversation.lastMessage ? new Date(conversation.lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</small></span><span><p>{conversation.lastMessage?.text || 'Start the conversation when you feel ready.'}</p>{conversation.unread > 0 && <em>{conversation.unread}</em>}</span></span>
         </button>)}
         {!loading && conversationItems.length === 0 && <div className="conversation-empty"><MessageCircle size={24} /><p>Your conversations will appear after you match with a peer supporter.</p></div>}
       </aside>
       <section className="chat-panel">
-        {other ? <><div className="chat-head"><div className="session-person"><span className="avatar" style={{ background: other.avatarColor }}>{other.displayName.split(' ').map((part) => part[0]).join('').slice(0, 2)}{other.availability === 'available' && <span className="online-dot" />}</span><div><h3>{other.displayName}</h3><p>{other.availability === 'available' ? 'Online' : 'Offline'} · {other.role === 'user' ? 'Anonymous member' : 'Peer supporter'}</p></div></div><button className="icon-button" aria-label="Conversation information" onClick={() => showToast('Conversation privacy: participants and authorized safety moderators only')}><Info size={19} /></button></div>
-        {isAwaitingAcceptance ? <div className="chat-pending-banner"><Clock3 size={15} /> Your chosen supporter will review your request before conversation starts. Messaging opens once accepted.</div> : <div className="chat-safety"><ShieldCheck size={15} /> This conversation is private and monitored only when safety concerns are reported.</div>}
+        {other ? <><div className="chat-head"><div className="session-person"><span className="avatar" style={{ background: other.avatarColor }}>{other.displayName.split(' ').map((part) => part[0]).join('').slice(0, 2)}{other.online && <span className="online-dot" />}</span><div><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><h3>{other.displayName}</h3>{isCompleted && <span className="status-badge">Completed</span>}{isAwaitingAcceptance && <span className="status-badge">Awaiting acceptance</span>}</div><p>{presenceLabel(other)} · {other.role === 'user' ? 'Anonymous member' : 'Peer supporter'}</p></div></div><div className="chat-head-actions">{user.role === 'volunteer' && activeConversation?.supportRequestStatus === 'in_progress' && (confirmComplete ? <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><button className="button button-danger button-sm" disabled={completing} onClick={completeChat}>Confirm complete</button><button className="button button-secondary button-sm" onClick={() => setConfirmComplete(false)}>Cancel</button></div> : <button className="button button-secondary button-sm" onClick={() => setConfirmComplete(true)} title="Complete this support chat"><CheckCircle2 size={15} /> Complete chat</button>)}<button className="icon-button" aria-label="Conversation information" onClick={() => showToast('Conversation privacy: participants and authorized safety moderators only')}><Info size={19} /></button></div></div>
+        {isCompleted ? <div className="chat-completed-banner"><CheckCircle2 size={15} /> This peer support session has been completed. The conversation is closed and read-only.</div> : isAwaitingAcceptance ? <div className="chat-pending-banner"><Clock3 size={15} /> Your chosen supporter will review your request before conversation starts. Messaging opens once accepted.</div> : <div className="chat-safety"><ShieldCheck size={15} /> This conversation is private and monitored only when safety concerns are reported.</div>}
         <div className="message-thread">
           <div className="day-divider"><span>Today</span></div>
           {messages.map((message) => <div key={message.id} className={`message-row ${message.senderId === user.id ? 'me' : 'them'}`}>
@@ -883,7 +958,7 @@ function MessagesView({ showToast, user, onNavigate }) {
           </div>)}
           <div ref={messagesEndRef} />
         </div>
-        <div className="composer"><textarea aria-label="Write a message" placeholder={isAwaitingAcceptance ? 'Awaiting supporter acceptance…' : 'Write a message…'} disabled={isAwaitingAcceptance} value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !isAwaitingAcceptance) { e.preventDefault(); sendMessage() } }} /><button onClick={sendMessage} disabled={isAwaitingAcceptance} aria-label="Send message"><Send size={18} /></button><span>{isAwaitingAcceptance ? 'Messaging opens once accepted by supporter' : 'Enter to send · Shift + Enter for a new line'}</span></div></> : <div className="chat-empty"><HeartHandshake size={38} /><h3>Your private conversations</h3><p>Choose a conversation, or create a peer-support request to begin.</p></div>}
+        {isCompleted ? <div className="composer-closed" role="status"><LockKeyhole size={18} /><div><b>Support session completed</b><p>This conversation has ended. Neither participant can send new messages.</p></div></div> : <div className="composer"><textarea aria-label="Write a message" placeholder={isAwaitingAcceptance ? 'Awaiting supporter acceptance…' : 'Write a message…'} disabled={isAwaitingAcceptance} value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !isAwaitingAcceptance) { e.preventDefault(); sendMessage() } }} /><button onClick={sendMessage} disabled={isAwaitingAcceptance} aria-label="Send message"><Send size={18} /></button><span>{isAwaitingAcceptance ? 'Messaging opens once accepted by supporter' : 'Enter to send · Shift + Enter for a new line'}</span></div>}</> : <div className="chat-empty"><HeartHandshake size={38} /><h3>Your private conversations</h3><p>Choose a conversation, or create a peer-support request to begin.</p></div>}
       </section>
     </div>
   )
@@ -1013,6 +1088,15 @@ function VolunteerDirectory({ onNavigate }) {
   }
 
   useEffect(() => { load() }, [])
+  useEffect(() => {
+    const updatePresence = (event) => {
+      const presence = event.detail
+      if (!presence?.userId) return
+      setVolunteers((items) => items.map((item) => item.id === presence.userId ? { ...item, ...presence } : item))
+    }
+    window.addEventListener('mentalbridge:presence', updatePresence)
+    return () => window.removeEventListener('mentalbridge:presence', updatePresence)
+  }, [])
 
   return <div className="volunteer-directory">
     <section className="volunteer-directory-hero">
@@ -1021,7 +1105,7 @@ function VolunteerDirectory({ onNavigate }) {
     </section>
     {error && <InlineError message={error} onRetry={load} />}
     {loading ? <div className="empty-state"><LoaderCircle className="spin" size={28} /><p>Finding your peer support team…</p></div> : volunteers.length ? <div className="volunteer-card-grid">{volunteers.map((volunteer) => <article className="volunteer-directory-card" key={volunteer.id}>
-      <div className="volunteer-card-head"><span className="avatar xl" style={{ background: volunteer.avatarColor }}>{volunteer.displayName.split(' ').map((part) => part[0]).join('').slice(0, 2)}<span className={`availability-dot ${volunteer.availability}`} /></span><div><h3>{volunteer.displayName}</h3><span className={`availability-label ${volunteer.availability}`}>{volunteer.availability === 'available' ? 'Available for new connections' : volunteer.availability === 'limited' ? 'Limited availability' : 'Currently away'}</span></div></div>
+      <div className="volunteer-card-head"><span className="avatar xl" style={{ background: volunteer.avatarColor }}>{volunteer.displayName.split(' ').map((part) => part[0]).join('').slice(0, 2)}{volunteer.online && <span className="online-dot" />}</span><div><h3>{volunteer.displayName}</h3><small className="presence-text">{presenceLabel(volunteer)}</small><span className={`availability-label ${volunteer.availability}`}>{volunteer.availability === 'available' ? 'Available for new connections' : volunteer.availability === 'limited' ? 'Limited availability' : 'Currently away'}</span></div></div>
       <p className="volunteer-card-bio">“{volunteer.bio}”</p>
       <div className="volunteer-card-stat"><span><StarRating rating={volunteer.rating} /> {volunteer.rating?.toFixed(1) || 'New'}</span><span>{volunteer.yearsActive || 0} years volunteering</span></div>
       <div className="volunteer-card-section"><b>Specialties</b><div className="expertise-row">{(volunteer.expertise || []).map((item) => <span key={item}>{item}</span>)}</div></div>
@@ -1177,6 +1261,22 @@ function AdminView({ showToast, user }) {
     } catch (requestError) { setError(requestError.message) }
   }
   useEffect(() => { load() }, [])
+  useEffect(() => {
+    const updatePresence = (event) => {
+      const presence = event.detail
+      if (!presence?.userId) return
+      setData((current) => {
+        const users = current.users.map((item) => item.id === presence.userId ? { ...item, ...presence } : item)
+        return {
+          ...current,
+          users,
+          stats: { ...current.stats, supportersOnline: users.filter((item) => item.role === 'volunteer' && item.online).length },
+        }
+      })
+    }
+    window.addEventListener('mentalbridge:presence', updatePresence)
+    return () => window.removeEventListener('mentalbridge:presence', updatePresence)
+  }, [])
   const removeReportedPost = async (reportId, postId) => {
     setBusy(reportId || postId)
     try {
@@ -1291,7 +1391,7 @@ function AdminView({ showToast, user }) {
         </div>
       </article>
     })}{!data.reports.length && <p className="empty-copy">No content reports have been submitted.</p>}</div></section>}
-    {tab === 'users' && <section className="admin-panel"><div className="section-heading"><div><span className="eyebrow">ACCESS MANAGEMENT</span><h2>People and platform roles</h2><p>Administrators assign moderators. Administrators and moderators can appoint verified volunteers.</p></div>{user.role === 'admin' && data.users.some((item) => item.email?.endsWith('@mentalbridge.demo')) && <button className="button button-danger" disabled={busy === 'purge-demo'} onClick={purgeDemoData}><Trash2 size={15} /> Remove sample accounts</button>}</div><div className="user-table">{data.users.map((item) => { const protectedFromModerator = user.role === 'moderator' && ['moderator', 'admin'].includes(item.role); return <div key={item.id}><span className="avatar" style={{ background: item.avatarColor }}>{item.displayName.slice(0, 2).toUpperCase()}</span><div><b>{item.displayName}</b><small>{item.email || `@${item.anonymousName}`} · {item.emailVerified ? 'Email verified' : 'Awaiting email verification'}</small></div><select aria-label={`Role for ${item.displayName}`} value={item.role} disabled={item.id === user.id || item.role === 'admin' || protectedFromModerator || busy === item.id} onChange={(event) => updateRole(item.id, event.target.value)}><option value="user">Member</option><option value="volunteer">Volunteer</option>{user.role === 'admin' && <option value="moderator">Moderator</option>}{item.role === 'admin' && <option value="admin">Administrator</option>}</select><span className="status-badge">{item.status}</span>{item.id !== user.id && item.role !== 'admin' && !protectedFromModerator && <button className="button button-secondary" disabled={busy === item.id} onClick={() => updateUser(item.id, item.status === 'active' ? 'suspended' : 'active')}>{item.status === 'active' ? 'Suspend' : 'Activate'}</button>}{user.role === 'admin' && item.id !== user.id && item.role !== 'admin' && <button className="button button-danger" disabled={busy === item.id} onClick={() => deleteUser(item)} title="Delete user"><Trash2 size={15} /> Remove</button>}</div> })}</div></section>}
+    {tab === 'users' && <section className="admin-panel"><div className="section-heading"><div><span className="eyebrow">ACCESS MANAGEMENT</span><h2>People and platform roles</h2><p>Administrators assign moderators. Administrators and moderators can appoint verified volunteers.</p></div>{user.role === 'admin' && data.users.some((item) => item.email?.endsWith('@mentalbridge.demo')) && <button className="button button-danger" disabled={busy === 'purge-demo'} onClick={purgeDemoData}><Trash2 size={15} /> Remove sample accounts</button>}</div><div className="user-table">{data.users.map((item) => { const protectedFromModerator = user.role === 'moderator' && ['moderator', 'admin'].includes(item.role); return <div key={item.id}><span className="avatar" style={{ background: item.avatarColor }}>{item.displayName.slice(0, 2).toUpperCase()}{item.online && <span className="online-dot" />}</span><div><b>{item.displayName}</b><small>{item.email || `@${item.anonymousName}`} · {item.emailVerified ? 'Email verified' : 'Awaiting email verification'} · {presenceLabel(item)}</small></div><select aria-label={`Role for ${item.displayName}`} value={item.role} disabled={item.id === user.id || item.role === 'admin' || protectedFromModerator || busy === item.id} onChange={(event) => updateRole(item.id, event.target.value)}><option value="user">Member</option><option value="volunteer">Volunteer</option>{user.role === 'admin' && <option value="moderator">Moderator</option>}{item.role === 'admin' && <option value="admin">Administrator</option>}</select><span className="status-badge">{item.status}</span>{item.id !== user.id && item.role !== 'admin' && !protectedFromModerator && <button className="button button-secondary" disabled={busy === item.id} onClick={() => updateUser(item.id, item.status === 'active' ? 'suspended' : 'active')}>{item.status === 'active' ? 'Suspend' : 'Activate'}</button>}{user.role === 'admin' && item.id !== user.id && item.role !== 'admin' && <button className="button button-danger" disabled={busy === item.id} onClick={() => deleteUser(item)} title="Delete user"><Trash2 size={15} /> Remove</button>}</div> })}</div></section>}
     {tab === 'posts' && <section className="admin-panel"><div className="section-heading"><div><span className="eyebrow">COMMUNITY CONTROL</span><h2>Community posts</h2></div></div><div className="management-list">{data.posts.map((post) => <article key={post.id} className={post.removed ? 'removed-item' : ''}><div><span className="category-tag">{post.category}</span><span className="status-badge">{post.removed ? 'removed' : post.locked ? 'locked' : 'live'}</span></div><h3>{post.title}</h3><p>{post.body}</p><small>Anonymous author: {post.author} · {new Date(post.createdAt).toLocaleString()}</small><div><button className="button button-secondary" disabled={busy === post.id || post.removed} onClick={() => moderatePost(post.id, { locked: !post.locked })}>{post.locked ? 'Unlock' : 'Lock'} discussion</button><button className="button button-secondary" disabled={busy === post.id || post.removed} onClick={() => moderatePost(post.id, { pinned: !post.pinned })}>{post.pinned ? 'Unpin' : 'Pin'} post</button><button className={post.removed ? 'button button-secondary' : 'button button-danger'} disabled={busy === post.id} onClick={() => moderatePost(post.id, { removed: !post.removed })}>{post.removed ? 'Restore post' : 'Remove post'}</button></div></article>)}{!data.posts.length && <p className="empty-copy">No community posts yet.</p>}</div></section>}
     {tab === 'resources' && <section className="admin-panel"><div className="section-heading"><div><span className="eyebrow">RESOURCE LIBRARY</span><h2>Educational resources</h2><p>Both administrators and moderators can create, edit, publish, and unpublish resources.</p></div><button className="button button-dark" onClick={() => setResourceEditor({ title: '', description: '', content: '', category: 'Self-care', type: '5 min read', icon: 'BookOpen', color: 'sage', featured: false, published: true })}><Plus size={16} /> Add resource</button></div><div className="management-list resource-management-list">{data.resources.map((resource) => <article key={resource.id}><div><span className="category-tag">{resource.category}</span><span className="status-badge">{resource.published ? 'published' : 'draft'}</span></div><h3>{resource.title}</h3><p>{resource.description}</p><div><button className="button button-secondary" onClick={() => setResourceEditor({ ...resource })}><Edit3 size={15} /> Edit</button><button className="button button-secondary" disabled={busy === resource.id} onClick={() => saveResource({ ...resource, published: !resource.published })}>{resource.published ? 'Unpublish' : 'Publish'}</button>{user.role === 'admin' && <button className="button button-danger" disabled={busy === resource.id} onClick={() => deleteResource(resource)}><Trash2 size={15} /> Remove</button>}</div></article>)}{!data.resources.length && <p className="empty-copy">No resources have been created.</p>}</div></section>}
     {tab === 'analytics' && <section className="admin-panel analytics-panel"><div className="section-heading"><div><span className="eyebrow">PLATFORM INSIGHTS</span><h2>Operational summary</h2></div><button className="button button-secondary" onClick={exportReport}><ExternalLink size={16} /> Export CSV</button></div><div className="analytics-grid"><div><b>{data.stats.positiveFeedback}%</b><span>Positive session feedback</span></div><div><b>{data.stats.supportersOnline}</b><span>Supporters available</span></div><div><b>{data.reports.filter((item) => item.status === 'resolved').length}</b><span>Resolved reports</span></div></div></section>}

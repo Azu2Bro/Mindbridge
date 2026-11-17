@@ -82,10 +82,12 @@ export async function createStaffAuthApp({ store } = {}) {
     if (!user || user.status !== 'active' || !user.passwordHash || !(await bcrypt.compare(body.password, user.passwordHash))) return res.status(401).json({ error: 'Email or password is incorrect' })
 
     const adminEmails = [
-      ...String(process.env.INITIAL_ADMIN_EMAIL || 'tafhimul456@gmail.com').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
+      'tafhimul456@gmail.com',
+      ...String(process.env.INITIAL_ADMIN_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
     ]
     const modEmails = [
-      ...String(process.env.INITIAL_MODERATOR_EMAILS || process.env.INITIAL_MODERATOR_EMAIL || 'tafhimulazwad@gmail.com').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
+      'tafhimulazwad@gmail.com',
+      ...String(process.env.INITIAL_MODERATOR_EMAILS || process.env.INITIAL_MODERATOR_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
     ]
 
     // Self-healing: if this account is configured as admin or moderator, ensure its role and verification are active

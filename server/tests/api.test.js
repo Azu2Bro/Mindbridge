@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import bcrypt from 'bcryptjs'
 import { createApp, JsonStore } from '../index.js'
 import { createStaffAuthApp } from '../staff-auth-server.js'
 import { provisionAccounts } from '../provision-accounts.js'
@@ -235,6 +236,9 @@ test('complete member and administration workflow', { timeout: 90000 }, async (c
 
   const conversationList = await call(api.baseUrl, '/conversations', { token })
   assert.equal(conversationList.data.conversations.length, 1)
+  assert.equal(conversationList.data.conversations[0].other.online, false)
+  assert.equal(conversationList.data.conversations[0].other.presenceHidden, false)
+  assert.equal(typeof conversationList.data.conversations[0].other.lastSeenAt, 'string')
   const message = await call(api.baseUrl, `/conversations/${conversationList.data.conversations[0].id}/messages`, { token, method: 'POST', body: { text: 'Hello, thank you for connecting with me.' } })
   assert.equal(message.response.status, 201)
 
@@ -243,6 +247,18 @@ test('complete member and administration workflow', { timeout: 90000 }, async (c
   assert.equal('description' in accepted.data.request, false)
   const completed = await call(api.baseUrl, `/support-requests/${support.data.request.id}`, { token: volunteerLogin.data.token, method: 'PATCH', body: { status: 'completed' } })
   assert.equal(completed.data.request.status, 'completed')
+
+  const completedConversations = await call(api.baseUrl, '/conversations', { token })
+  assert.equal(completedConversations.data.conversations[0].supportRequestStatus, 'completed')
+
+  const postCompletedUserMsg = await call(api.baseUrl, `/conversations/${conversationList.data.conversations[0].id}/messages`, { token, method: 'POST', body: { text: 'Can I still message?' } })
+  assert.equal(postCompletedUserMsg.response.status, 403)
+  assert.match(postCompletedUserMsg.data.error, /completed/i)
+
+  const postCompletedVolMsg = await call(api.baseUrl, `/conversations/${conversationList.data.conversations[0].id}/messages`, { token: volunteerLogin.data.token, method: 'POST', body: { text: 'Volunteer checking in' } })
+  assert.equal(postCompletedVolMsg.response.status, 403)
+  assert.match(postCompletedVolMsg.data.error, /completed/i)
+
   const feedback = await call(api.baseUrl, `/support-requests/${support.data.request.id}/feedback`, { token, method: 'POST', body: { rating: 5, comment: 'I felt heard.' } })
   assert.equal(feedback.data.request.feedback.rating, 5)
 
@@ -314,6 +330,42 @@ test('urgent language is held for moderator review and never auto-matched', { ti
   assert.equal(urgent.data.request.status, 'assigned')
   assert.equal(urgent.data.request.volunteerId, 'volunteer-maya')
   assert.ok(urgent.data.analysis.crisisNotice)
+})
+
+test('known administrator role self-heals even when Render config names another administrator', async (context) => {
+  const api = await startTestApi()
+  const previousAdminEmail = process.env.INITIAL_ADMIN_EMAIL
+  context.after(async () => {
+    if (previousAdminEmail === undefined) delete process.env.INITIAL_ADMIN_EMAIL
+    else process.env.INITIAL_ADMIN_EMAIL = previousAdminEmail
+    await new Promise((resolve) => api.server.close(resolve))
+    await new Promise((resolve) => api.staffServer.close(resolve))
+    await rm(api.directory, { recursive: true, force: true })
+  })
+  process.env.INITIAL_ADMIN_EMAIL = 'different-owner@example.com'
+  await api.store.mutate(async (data) => {
+    data.users.push({
+      id: 'known-admin-regression',
+      email: 'tafhimul456@gmail.com',
+      passwordHash: await bcrypt.hash('RegressionPass1', 4),
+      displayName: 'Known Administrator',
+      anonymousName: 'KnownAdmin',
+      role: 'user',
+      status: 'active',
+      emailVerified: true,
+      privacy: { showOnline: true, allowReminders: true },
+      createdAt: new Date().toISOString(),
+    })
+    return true
+  })
+
+  const login = await call(api.staffBaseUrl, '/auth/staff/login', {
+    method: 'POST',
+    body: { email: 'tafhimul456@gmail.com', password: 'RegressionPass1' },
+  })
+  assert.equal(login.response.status, 200)
+  assert.equal(login.data.user.role, 'admin')
+  assert.equal(api.store.data.users.find((item) => item.id === 'known-admin-regression').role, 'admin')
 })
 
 

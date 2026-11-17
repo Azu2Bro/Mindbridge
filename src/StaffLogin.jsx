@@ -160,7 +160,7 @@ export default function StaffLogin({ theme }) {
                 <span>Staff email address</span>
                 <div style={{ position: 'relative' }}>
                   <input type="email" required value={forgotEmail} onChange={(e) => setForgotEmail(e.target.value)} placeholder="you@mentalbridge.demo" autoComplete="email" />
-                  <Mail size={17} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', opacity: 0.35, pointerEvents: 'none' }} />
+                  <Mail size={17} style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', pointerEvents: 'none' }} />
                 </div>
               </label>
 

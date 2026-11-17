@@ -56,20 +56,29 @@ function parse(schema, value) {
   return result.data
 }
 
-function volunteerProfile(user, matchScore) {
+function visiblePresence(user, presenceConnections) {
+  if (!user || user.privacy?.showOnline === false) return { online: false, lastSeenAt: null, presenceHidden: true }
+  return {
+    online: Boolean(presenceConnections?.get(user.id)),
+    lastSeenAt: user.lastSeenAt || user.createdAt || null,
+    presenceHidden: false,
+  }
+}
+
+function volunteerProfile(user, matchScore, presenceConnections) {
   const safe = publicUser(user)
   delete safe.email
   delete safe.privacy
   delete safe.bookmarks
   delete safe.postBookmarks
-  return { ...safe, matchScore }
+  return { ...safe, ...visiblePresence(user, presenceConnections), matchScore }
 }
 
-function peerVisibleProfile(user, viewerId) {
+function peerVisibleProfile(user, viewerId, presenceConnections) {
   if (!user) return null
-  if (user.id === viewerId) return publicUser(user)
-  if (user.role === 'user') return { id: user.id, displayName: user.anonymousName, anonymousName: user.anonymousName, role: 'user', avatarColor: user.avatarColor }
-  return volunteerProfile(user)
+  if (user.id === viewerId) return { ...publicUser(user), ...visiblePresence(user, presenceConnections) }
+  if (user.role === 'user') return { id: user.id, displayName: user.anonymousName, anonymousName: user.anonymousName, role: 'user', avatarColor: user.avatarColor, ...visiblePresence(user, presenceConnections) }
+  return volunteerProfile(user, undefined, presenceConnections)
 }
 
 function generateDemoVolunteerReply(volunteer, userText, replyIndex) {
@@ -163,11 +172,13 @@ async function normalizeDataStore(dataStore) {
 
     const adminEmails = [
       ...(demoMode ? ['admin@mentalbridge.demo'] : []),
-      ...String(process.env.INITIAL_ADMIN_EMAIL || 'tafhimul456@gmail.com').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
+      'tafhimul456@gmail.com',
+      ...String(process.env.INITIAL_ADMIN_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
     ]
     const modEmails = [
       ...(demoMode ? ['moderator@mentalbridge.demo'] : []),
-      ...String(process.env.INITIAL_MODERATOR_EMAILS || process.env.INITIAL_MODERATOR_EMAIL || 'tafhimulazwad@gmail.com').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
+      'tafhimulazwad@gmail.com',
+      ...String(process.env.INITIAL_MODERATOR_EMAILS || process.env.INITIAL_MODERATOR_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
     ]
     data.users.forEach((user) => {
       const email = user.email?.trim().toLowerCase()
@@ -181,6 +192,7 @@ async function normalizeDataStore(dataStore) {
       user.bookmarks ||= []
       user.postBookmarks ||= []
       user.privacy ||= { showOnline: true, allowReminders: true }
+      user.lastSeenAt ||= user.createdAt || now()
       // Accounts created before email verification was introduced remain usable.
       user.emailVerified ??= true
     })
@@ -237,6 +249,7 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     : null
   app.locals.store = dataStore
   app.locals.storageMode = storageMode
+  app.locals.presenceConnections = new Map()
 
   app.use(helmet({
     crossOriginResourcePolicy: { policy: 'cross-origin' },
@@ -289,6 +302,8 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     }), req.body)
 
     const staffEmails = [
+      'tafhimul456@gmail.com',
+      'tafhimulazwad@gmail.com',
       ...String(process.env.INITIAL_ADMIN_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
       ...String(process.env.INITIAL_MODERATOR_EMAILS || process.env.INITIAL_MODERATOR_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
     ]
@@ -320,6 +335,7 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
         status: 'active',
         emailVerified: false,
         createdAt: now(),
+        lastSeenAt: now(),
         avatarColor: '#5e9779',
         bookmarks: [],
         postBookmarks: [],
@@ -424,6 +440,8 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     if (existingStaff) return res.status(409).json({ error: 'An account with this email already exists' })
     // Also block provisioned staff emails that haven't been set up yet
     const staffEmails = [
+      'tafhimul456@gmail.com',
+      'tafhimulazwad@gmail.com',
       ...String(process.env.INITIAL_ADMIN_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
       ...String(process.env.INITIAL_MODERATOR_EMAILS || process.env.INITIAL_MODERATOR_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
     ]
@@ -432,7 +450,7 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
       id: id('user'), email: body.email, passwordHash: await bcrypt.hash(body.password, 12), displayName: body.displayName,
       anonymousName: body.anonymousName || `GentleRiver${Math.floor(Math.random() * 900 + 100)}`,
       role: 'user', status: 'active', privacy: { showOnline: true, allowReminders: true }, bookmarks: [],
-      emailVerified: false, createdAt: now(), avatarColor: '#e5aa82', avatarUrl: body.avatarUrl,
+      emailVerified: false, createdAt: now(), lastSeenAt: now(), avatarColor: '#e5aa82', avatarUrl: body.avatarUrl,
     }
     const verificationToken = randomBytes(32).toString('hex')
     const tokenHash = createHash('sha256').update(verificationToken).digest('hex')
@@ -516,6 +534,8 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
       } else {
         // Block staff emails from creating user accounts via Google sign-in
         const staffEmails = [
+          'tafhimul456@gmail.com',
+          'tafhimulazwad@gmail.com',
           ...String(process.env.INITIAL_ADMIN_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
           ...String(process.env.INITIAL_MODERATOR_EMAILS || process.env.INITIAL_MODERATOR_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
         ]
@@ -528,7 +548,7 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
           id: id('user'), email: identity.email, displayName: identity.name.length >= 2 ? identity.name : 'Google Member',
           anonymousName: `GentleRiver${Math.floor(Math.random() * 900 + 100)}`,
           role: 'user', status: 'active', privacy: { showOnline: true, allowReminders: true }, bookmarks: [], postBookmarks: [],
-          emailVerified: true, createdAt: now(), avatarColor: '#e5aa82',
+          emailVerified: true, createdAt: now(), lastSeenAt: now(), avatarColor: '#e5aa82',
         }
         data.users.push(user)
         created = true
@@ -616,10 +636,12 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
       user.emailVerified = true
       delete user.accountSetupRequired
       const adminEmails = [
-        ...String(process.env.INITIAL_ADMIN_EMAIL || 'tafhimul456@gmail.com').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
+        'tafhimul456@gmail.com',
+        ...String(process.env.INITIAL_ADMIN_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
       ]
       const modEmails = [
-        ...String(process.env.INITIAL_MODERATOR_EMAILS || process.env.INITIAL_MODERATOR_EMAIL || 'tafhimulazwad@gmail.com').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
+        'tafhimulazwad@gmail.com',
+        ...String(process.env.INITIAL_MODERATOR_EMAILS || process.env.INITIAL_MODERATOR_EMAIL || '').split(',').filter(Boolean).map((e) => e.trim().toLowerCase()),
       ]
       const normalizedEmail = user.email?.trim().toLowerCase()
       if (adminEmails.includes(normalizedEmail)) {
@@ -639,7 +661,7 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
   const requireAuth = authRequired(dataStore)
   app.use('/api', requireAuth)
 
-  app.get('/api/auth/me', (req, res) => res.json({ user: publicUser(req.user) }))
+  app.get('/api/auth/me', (req, res) => res.json({ user: { ...publicUser(req.user), ...visiblePresence(req.user, app.locals.presenceConnections) } }))
   app.put('/api/users/me', asyncRoute(async (req, res) => {
     const body = parse(z.object({
       displayName: z.string().trim().min(2).max(70).optional(),
@@ -656,6 +678,7 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
       data.auditLogs.push({ id: id('audit'), actorId: user.id, action: 'profile.updated', createdAt: now() })
       return user
     })
+    app.locals.emitPresence?.(updated)
     res.json({ user: publicUser(updated) })
   }))
   app.post('/api/users/me/volunteer-application', allowRoles('user'), asyncRoute(async (req, res) => {
@@ -716,7 +739,7 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     const volunteer = current ? data.users.find((user) => user.id === current.volunteerId) : null
     const moods = data.moods.filter((mood) => mood.userId === req.user.id).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)).slice(-7)
     const notifications = data.notifications.filter((notification) => notification.userId === req.user.id && !notification.read).length
-    res.json({ currentSupport: current ? { ...current, volunteer: volunteerProfile(volunteer, current.matchScore) } : null, moods, unreadNotifications: notifications })
+    res.json({ currentSupport: current ? { ...current, volunteer: volunteerProfile(volunteer, current.matchScore, app.locals.presenceConnections) } : null, moods, unreadNotifications: notifications })
   })
 
   app.post('/api/ai/analyze', allowRoles('user'), rateLimit({ windowMs: 60000, limit: 12 }), asyncRoute(async (req, res) => {
@@ -731,14 +754,14 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     const ranked = rankVolunteers(tags, dataStore.data.users, {
       includeDemo: includeDemoMatches(), priorities,
       activeAssignments: activeVolunteerAssignments(dataStore.data.supportRequests),
-    }).map((volunteer) => volunteerProfile(volunteer, volunteer.matchScore))
+    }).map((volunteer) => volunteerProfile(volunteer, volunteer.matchScore, app.locals.presenceConnections))
     res.json({ volunteers: ranked })
   })
   app.get('/api/volunteer-directory', (req, res) => {
     const volunteers = dataStore.data.users
       .filter((user) => user.role === 'volunteer' && user.status === 'active' && user.emailVerified)
       .sort((a, b) => Number(b.availability === 'available') - Number(a.availability === 'available') || (b.rating || 0) - (a.rating || 0))
-      .map((volunteer) => volunteerProfile(volunteer, undefined))
+      .map((volunteer) => volunteerProfile(volunteer, undefined, app.locals.presenceConnections))
     res.json({ volunteers })
   })
 
@@ -750,8 +773,8 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     requests = requests.map((request) => {
       const visible = {
         ...request,
-        user: peerVisibleProfile(data.users.find((user) => user.id === request.userId), req.user.id),
-        volunteer: request.volunteerId ? volunteerProfile(data.users.find((user) => user.id === request.volunteerId), request.matchScore) : null,
+        user: peerVisibleProfile(data.users.find((user) => user.id === request.userId), req.user.id, app.locals.presenceConnections),
+        volunteer: request.volunteerId ? volunteerProfile(data.users.find((user) => user.id === request.volunteerId), request.matchScore, app.locals.presenceConnections) : null,
       }
       if (req.user.role === 'volunteer') {
         delete visible.description
@@ -803,7 +826,7 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     if (app.locals.io && volunteer) {
       app.locals.io.to(volunteer.id).emit('notification', { type: 'support', title: 'New peer-support request' })
     }
-    res.status(201).json({ ...result, analysis, volunteer: volunteer ? volunteerProfile(volunteer, matchScore) : null })
+    res.status(201).json({ ...result, analysis, volunteer: volunteer ? volunteerProfile(volunteer, matchScore, app.locals.presenceConnections) : null })
   }))
 
   app.patch('/api/support-requests/:requestId', allowRoles('volunteer', 'moderator', 'admin'), asyncRoute(async (req, res) => {
@@ -836,6 +859,17 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
           createdAt: now(),
         })
       }
+      if (body.status === 'completed') {
+        data.notifications.push({
+          id: id('notification'),
+          userId: item.userId,
+          type: 'support',
+          title: 'Peer support session completed',
+          body: `${req.user.displayName} marked your peer support session as completed. Thank you for connecting.`,
+          read: false,
+          createdAt: now(),
+        })
+      }
       if (body.volunteerId && body.volunteerId !== previousVolunteerId) {
         const volunteer = data.users.find((user) => user.id === body.volunteerId && user.role === 'volunteer' && user.status === 'active')
         if (!volunteer) { const error = new Error('Volunteer not found'); error.status = 400; throw error }
@@ -850,6 +884,10 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
       return item
     })
     app.locals.io?.to(request.userId).emit('notification', { type: 'support', title: 'Your support request was updated' })
+    app.locals.io?.to(request.userId).emit('support:updated', { requestId: request.id, status: request.status })
+    if (request.volunteerId) {
+      app.locals.io?.to(request.volunteerId).emit('support:updated', { requestId: request.id, status: request.status })
+    }
     const visibleRequest = { ...request }
     if (req.user.role === 'volunteer') { delete visibleRequest.description; delete visibleRequest.sessionNote }
     res.json({ request: visibleRequest })
@@ -1017,7 +1055,7 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
         id: conversation.id,
         supportRequestId: conversation.supportRequestId,
         supportRequestStatus: supportRequest?.status || 'in_progress',
-        other: peerVisibleProfile(other, req.user.id),
+        other: peerVisibleProfile(other, req.user.id, app.locals.presenceConnections),
         lastMessage,
         unread: conversation.messages.filter((message) => message.senderId !== req.user.id && !message.readBy.includes(req.user.id)).length,
         createdAt: conversation.createdAt,
@@ -1046,7 +1084,12 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
       const conversation = data.conversations.find((item) => item.id === req.params.conversationId && item.participantIds.includes(req.user.id))
       if (!conversation) { const error = new Error('Conversation not found'); error.status = 404; throw error }
       const supportRequest = conversation.supportRequestId ? data.supportRequests.find((r) => r.id === conversation.supportRequestId) : null
-      const isPendingSupport = Boolean(supportRequest && !['in_progress', 'completed'].includes(supportRequest.status))
+      if (supportRequest && ['completed', 'declined'].includes(supportRequest.status)) {
+        const error = new Error('This peer support conversation has been completed. Messaging is closed.')
+        error.status = 403
+        throw error
+      }
+      const isPendingSupport = Boolean(supportRequest && supportRequest.status !== 'in_progress')
       if (req.user.role === 'volunteer' && isPendingSupport) {
         const error = new Error('Please accept the peer support request before sending messages'); error.status = 403; throw error
       }
@@ -1074,6 +1117,8 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
             const snap = dataStore.snapshot()
             const conv = snap.conversations.find((c) => c.id === req.params.conversationId)
             if (!conv) return
+            const sReq = conv.supportRequestId ? snap.supportRequests.find((r) => r.id === conv.supportRequestId) : null
+            if (sReq && ['completed', 'declined'].includes(sReq.status)) return
             const volunteerMsgCount = conv.messages.filter((m) => m.senderId === recipient.id).length
             const replyText = generateDemoVolunteerReply(recipient, text, volunteerMsgCount)
             const replyMsg = await dataStore.mutate((data) => {
@@ -1117,7 +1162,7 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
     const data = dataStore.snapshot()
     const activeUsers = data.users.filter((user) => user.status === 'active').length
     const openRequests = data.supportRequests.filter((request) => !['completed', 'declined'].includes(request.status)).length
-    const supportersOnline = rankVolunteers([], data.users).filter((user) => user.availability === 'available').length
+    const supportersOnline = data.users.filter((user) => user.role === 'volunteer' && app.locals.presenceConnections.get(user.id)).length
     const openReports = data.reports.filter((report) => report.status === 'open').length
     const completed = data.supportRequests.filter((request) => request.status === 'completed' && request.feedback)
     const positiveFeedback = completed.length ? Math.round(completed.filter((request) => request.feedback.rating >= 4).length / completed.length * 100) : 100
@@ -1215,7 +1260,7 @@ export async function createApp({ store: suppliedStore, googleVerifier = verifyG
   }))
   app.get('/api/admin/audit-logs', allowRoles('admin'), (req, res) => res.json({ logs: dataStore.data.auditLogs.slice(-100).reverse() }))
   app.get('/api/admin/users', allowRoles('moderator', 'admin'), (req, res) => {
-    const users = dataStore.data.users.map((user) => ({ ...publicUser(user), email: req.user.role === 'admin' ? user.email : undefined }))
+    const users = dataStore.data.users.map((user) => ({ ...publicUser(user), ...visiblePresence(user, app.locals.presenceConnections), email: req.user.role === 'admin' ? user.email : undefined }))
     res.json({ users })
   })
   app.get('/api/admin/volunteer-applications', allowRoles('moderator', 'admin'), (req, res) => {
@@ -1365,6 +1410,20 @@ export async function startServer({ store } = {}) {
       : {}
   const io = new SocketServer(server, socketOptions)
   app.locals.io = io
+  const presenceConnections = app.locals.presenceConnections
+  const emitPresence = (user) => {
+    if (!user) return
+    const audienceIds = new Set([user.id])
+    for (const conversation of app.locals.store.data.conversations || []) {
+      if (conversation.participantIds?.includes(user.id)) {
+        for (const participantId of conversation.participantIds) audienceIds.add(participantId)
+      }
+    }
+    const payload = { userId: user.id, ...visiblePresence(user, presenceConnections) }
+    for (const audienceId of audienceIds) io.to(audienceId).emit('presence', payload)
+    io.to(['role:admin', 'role:moderator']).emit('presence', payload)
+  }
+  app.locals.emitPresence = emitPresence
   io.use((socket, next) => {
     try {
       const payload = verifyToken(socket.handshake.auth?.token)
@@ -1377,6 +1436,30 @@ export async function startServer({ store } = {}) {
   io.on('connection', (socket) => {
     socket.join(socket.user.id)
     socket.join(`role:${socket.user.role}`)
+    const count = (presenceConnections.get(socket.user.id) || 0) + 1
+    presenceConnections.set(socket.user.id, count)
+    if (count === 1) emitPresence(socket.user)
+
+    socket.on('disconnect', async () => {
+      const remaining = Math.max(0, (presenceConnections.get(socket.user.id) || 1) - 1)
+      if (remaining > 0) {
+        presenceConnections.set(socket.user.id, remaining)
+        return
+      }
+      presenceConnections.delete(socket.user.id)
+      try {
+        const disconnectedUser = await app.locals.store.mutate((data) => {
+          const user = data.users.find((item) => item.id === socket.user.id)
+          if (!user) return null
+          user.lastSeenAt = now()
+          return user
+        })
+        emitPresence(disconnectedUser || socket.user)
+      } catch (error) {
+        console.error('Could not save last-seen time:', error.message)
+        emitPresence(socket.user)
+      }
+    })
   })
   const port = Number(process.env.PORT || 3001)
   await new Promise((resolveListen) => server.listen(port, '0.0.0.0', resolveListen))

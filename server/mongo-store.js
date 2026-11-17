@@ -29,7 +29,7 @@ export class MongoStore {
   async persist() {
     await this.collection.replaceOne(
       { _id: 'mentalbridge' },
-      { _id: 'mentalbridge', payload: this.data, updatedAt: new Date() },
+      { _id: 'mentalbridge', payload: this.data, revision: 1, updatedAt: new Date() },
       { upsert: true },
     )
   }
@@ -46,17 +46,31 @@ export class MongoStore {
   async appendAuditLog(entry) {
     await this.collection.updateOne(
       { _id: 'mentalbridge' },
-      { $push: { 'payload.auditLogs': entry } },
+      { $push: { 'payload.auditLogs': entry }, $inc: { revision: 1 }, $set: { updatedAt: new Date() } },
     )
   }
 
   async mutate(mutator) {
     const operation = this.writeQueue.then(async () => {
-      const document = await this.collection.findOne({ _id: 'mentalbridge' })
-      if (document?.payload) this.data = document.payload
-      const result = await mutator(this.data)
-      await this.persist()
-      return structuredClone(result)
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const document = await this.collection.findOne({ _id: 'mentalbridge' })
+        if (!document?.payload) throw new Error('MentalBridge database state is unavailable')
+        const revision = Number(document.revision || 0)
+        const nextData = structuredClone(document.payload)
+        const result = await mutator(nextData)
+        const revisionFilter = revision === 0
+          ? { $or: [{ revision: { $exists: false } }, { revision: 0 }] }
+          : { revision }
+        const update = await this.collection.updateOne(
+          { _id: 'mentalbridge', ...revisionFilter },
+          { $set: { payload: nextData, updatedAt: new Date() }, $inc: { revision: 1 } },
+        )
+        if (update.matchedCount === 1) {
+          this.data = nextData
+          return structuredClone(result)
+        }
+      }
+      throw new Error('MentalBridge data changed repeatedly while saving; please retry')
     })
     this.writeQueue = operation.catch(() => undefined)
     return operation
