@@ -90,17 +90,29 @@ async function assertMobileLayout(label) {
         return { selector: element.className || element.tagName, left: Math.round(rect.left), right: Math.round(rect.right) }
       })
       .filter((item) => item.left < -1 || item.right > innerWidth + 1)
+    const clippedText = [...document.querySelectorAll('h1,h2,h3,h4,p,small,b,em,label,button,a,span')]
+      .filter(visible)
+      .filter((element) => !element.closest('.sr-only,[aria-hidden="true"]'))
+      .filter((element) => element.childElementCount === 0 && element.textContent.trim())
+      .filter((element) => {
+        const style = getComputedStyle(element)
+        const clips = ['hidden', 'clip'].includes(style.overflow) || ['hidden', 'clip'].includes(style.overflowX) || ['hidden', 'clip'].includes(style.overflowY)
+        return clips && (element.scrollWidth > element.clientWidth + 1 || element.scrollHeight > element.clientHeight + 1)
+      })
+      .map((element) => ({ selector: element.className || element.tagName, text: element.textContent.trim().slice(0, 70), width: element.clientWidth, scrollWidth: element.scrollWidth, height: element.clientHeight, scrollHeight: element.scrollHeight }))
     return {
       viewport: innerWidth,
       rootWidth: document.documentElement.scrollWidth,
       bodyWidth: document.body.scrollWidth,
       outside,
+      clippedText,
       volunteerColumns: document.querySelector('.volunteer-card-grid') ? getComputedStyle(document.querySelector('.volunteer-card-grid')).gridTemplateColumns.split(' ').length : 0,
     }
   })()`)
   assert.ok(layout.rootWidth <= layout.viewport + 1, `${label}: root width ${layout.rootWidth}px exceeds ${layout.viewport}px viewport`)
   assert.ok(layout.bodyWidth <= layout.viewport + 1, `${label}: body width ${layout.bodyWidth}px exceeds ${layout.viewport}px viewport`)
   assert.deepEqual(layout.outside, [], `${label}: important content is outside the viewport`)
+  assert.deepEqual(layout.clippedText, [], `${label}: text is clipped`)
   if (layout.volunteerColumns) assert.equal(layout.volunteerColumns, 1, `${label}: volunteer cards should use one column on phones`)
 }
 
@@ -195,6 +207,7 @@ try {
   await send('Emulation.setDeviceMetricsOverride', { width: 320, height: 740, deviceScaleFactor: 1, mobile: true })
   await clickAriaLabel('Notifications')
   await waitForText('Mark all read')
+  await delay(250)
   const notificationLayout = await evaluate(`(() => { const panel = document.querySelector('.notification-popover').getBoundingClientRect(); const bell = document.querySelector('.notification-button'); return { left: panel.left, right: panel.right, viewport: innerWidth, display: getComputedStyle(bell).display } })()`)
   assert.notEqual(notificationLayout.display, 'none')
   assert.ok(notificationLayout.left >= 0 && notificationLayout.right <= notificationLayout.viewport)
@@ -214,6 +227,11 @@ try {
   }
   assert.equal(await evaluate(`(() => { const button = [...document.querySelectorAll('.main-nav .nav-item')].find((item) => item.textContent.includes('Home')); if (!button) return false; button.click(); return true })()`), true)
   await delay(250)
+  await send('Emulation.setDeviceMetricsOverride', { width: 667, height: 375, deviceScaleFactor: 1, mobile: true })
+  assert.equal(await evaluate(`(() => { const button = document.querySelector('.hero-actions .button-coral'); if (!button) return false; button.click(); return true })()`), true)
+  await waitForText('START WHERE YOU ARE')
+  await assertMobileLayout('support dialog in phone landscape')
+  await clickAriaLabel('Close')
   await send('Emulation.clearDeviceMetricsOverride')
   const typeScale = await evaluate(`(() => ({ nav: parseFloat(getComputedStyle(document.querySelector('.nav-item')).fontSize), body: parseFloat(getComputedStyle(document.querySelector('.hero-copy > p')).fontSize), button: parseFloat(getComputedStyle(document.querySelector('.button')).fontSize) }))()`)
   assert.ok(typeScale.nav >= 15)
@@ -342,7 +360,7 @@ try {
   const volunteerRole = await evaluate(`(async () => { const response = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'maya@mentalbridge.demo', password: 'Demo123!' }) }); const data = await response.json(); localStorage.setItem('mentalbridge-token', data.token); return data.user.role })()`, true)
   assert.equal(volunteerRole, 'volunteer')
   await send('Page.reload', { ignoreCache: true })
-  await waitForText('Your assigned connections')
+  await waitForText('Your peer support connections')
   const volunteerNavigation = await evaluate(`[...document.querySelectorAll('.main-nav .nav-item')].map((item) => item.querySelector(':scope > span')?.textContent.trim())`)
   assert.deepEqual(volunteerNavigation, ['Peer support', 'Messages', 'Community', 'Resources'])
   assert.equal(await evaluate(`document.body.innerText.includes('Moderator-only note')`), false)
